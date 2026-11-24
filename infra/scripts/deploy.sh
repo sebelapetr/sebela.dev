@@ -3,8 +3,10 @@
 # "Deployment"; infra/README.md, "Deployment"). Run only as the forced command of the `deploy`
 # user's SSH key, or by the owner on the server. The only input is one of:
 #
-#   deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> ai-service=<commit>
-#             the release commit and the verified tag set of the release job
+#   deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> [ai-service=<commit>]
+#             the release commit and the verified tag set of the release job; the AI service's tag
+#             is left out by the release job until the owner enables it (docs/release-workflow.md,
+#             "Repository files"), because a server whose script predates it refuses that input
 #   rollback  back to the previous verified release
 #
 # As the forced command the input is SSH_ORIGINAL_COMMAND and arguments are ignored; otherwise it
@@ -57,7 +59,7 @@ SERVICES=(api web mcp-admin ai-service)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKOUT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MIGRATIONS_DIR=/app/packages/db/migrations
-USAGE="usage: deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> ai-service=<commit> | rollback"
+USAGE="usage: deploy release=<commit> api=<commit> web=<commit> mcp-admin=<commit> [ai-service=<commit>] | rollback"
 
 say() { printf 'deploy: %s\n' "$*" >&2; }
 fail() {
@@ -80,13 +82,13 @@ if ((${#input} > 320)) || [[ ! "$input" =~ ^[a-z0-9=-]+( [a-z0-9=-]+)*$ ]]; then
 fi
 read -r -a words <<<"$input"
 
-# parse_set <array name> <input|record> <word>...: a complete tag set, every service once with a
-# commit SHA. A line of the record written before the AI service was deployed names three
-# services; the AI service has no tag in it, and starting that release leaves the AI service out.
+# parse_set <array name> <word>...: a tag set, api, web and mcp-admin once each with a commit SHA,
+# and the AI service once or not at all. Without it (a line of the record written before the AI
+# service was deployed, or the input of the transition release, which the previous script's limits
+# allow) the release has no AI service image, and starting it leaves the AI service out.
 parse_set() {
   local -n into="$1"
-  local source="$2"
-  shift 2
+  shift
   into=()
   local word service known
   for word in "$@"; do
@@ -99,8 +101,7 @@ parse_set() {
     into[$service]="${BASH_REMATCH[2]}"
   done
   for service in "${SERVICES[@]}"; do
-    [[ -n "${into[$service]:-}" || ("$source" == record && "$service" == ai-service) ]] ||
-      fail "missing service: $service"
+    [[ -n "${into[$service]:-}" || "$service" == ai-service ]] || fail "missing service: $service"
   done
 }
 
@@ -130,7 +131,7 @@ case "$command" in
       fi
     done
     [[ -n "$release" ]] || fail "missing release commit: $USAGE"
-    parse_set target input "${service_words[@]}"
+    parse_set target "${service_words[@]}"
     ;;
   rollback)
     ((${#words[@]} == 1)) || fail "$USAGE"
@@ -258,7 +259,7 @@ recorded() {
 load_set() {
   local -a recorded_words
   read -r -a recorded_words <<<"$2"
-  parse_set "$1" record "${recorded_words[@]}"
+  parse_set "$1" "${recorded_words[@]}"
 }
 
 # The migration files in an API image, one per line; fails when the image cannot be read.

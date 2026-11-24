@@ -155,7 +155,7 @@ let failed = false;
 try {
   if (!hadBaseImage) docker(["pull", BASE_IMAGE]);
   // Each release's images appear just before its deployment, as a pull would bring them: a
-  // healthy deployment prunes every image of the three services outside the last two releases.
+  // healthy deployment prunes every image of the four services outside the last two releases.
 
   // The first release: no current release, so it backs up first, then runs healthy.
   commitRelease(RELEASES.first);

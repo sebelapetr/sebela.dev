@@ -92,7 +92,7 @@ Every setting comes from the environment; nothing about the environment is hard-
 | `AI_SERVICE_LANGFUSE_SECRET_KEY`  | The project's secret key; only in the server's production environment file, never in a development checkout.                                                                                                                         |
 | `AI_SERVICE_LANGFUSE_ENVIRONMENT` | The trace environment: lowercase letters, digits, `-` or `_`, at most 40, not starting with `langfuse`; default `development`.                                                                                                       |
 | `AI_SERVICE_TRACE_DETECTOR_DIR`   | An optional pinned local detector folder for the trace export (absolute); a folder that is not an accepted detector keeps it metadata-only.                                                                                          |
-| `ANTHROPIC_API_KEY`               | The provider key, required in `anthropic` mode; only through the secret wrapper, never in an environment file.                                                                                                                       |
+| `ANTHROPIC_API_KEY`               | The provider key, required in `anthropic` mode; in development only through the secret wrapper, never in an environment file; the server's production environment file (mode 600) is the one file that holds it.                     |
 
 ## Container
 

@@ -336,9 +336,14 @@ jobs:
           install -d -m 700 "$SSH_DIR"
           (umask 077 && printf '%s\n' "$SSH_KEY" > "$SSH_DIR/key")
           printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
+      # The AI service's tag is part of the input only when the variable DEPLOY_AI_SERVICE_INPUT of
+      # the `production` environment is `true`, which the owner sets after the first release that
+      # carries the new deploy script: the script on the server validates the input before it
+      # checks the release out, and the previous one refuses the longer input.
       - name: Deploy the verified tag set
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_AI_SERVICE_INPUT: ${{ vars.DEPLOY_AI_SERVICE_INPUT }}
         run: |
           input="$(node scripts/release/deployment.mjs input)"
           ssh -i "$SSH_DIR/key" -o IdentitiesOnly=yes -o BatchMode=yes \

@@ -540,13 +540,14 @@ try {
     "unreachable",
     "the AI service cannot reach Postgres",
   );
+  const aiContainerPort = compose(["exec", "-T", "ai-service", "printenv", "LLM_AGENT_PORT"]);
   const webProbe = compose([
     "exec",
     "-T",
     "web",
     "node",
     "--eval",
-    `require("node:net").connect({ host: "ai-service", port: ${apiContainerPort} })` +
+    `require("node:net").connect({ host: "ai-service", port: ${aiContainerPort} })` +
       '.on("connect", () => { console.log("reachable"); process.exit(0); })' +
       '.on("error", () => { console.log("unreachable"); process.exit(0); })' +
       '.setTimeout(3000, () => { console.log("unreachable"); process.exit(0); });',
@@ -753,6 +754,17 @@ try {
     await answer.arrayBuffer();
     assert.equal(answer.status, 503, `${route} answers 503 with the chat off`);
   }
+  // The API's own chat route, not only the website's relay, refuses with 503 while it is off.
+  const apiChat = compose([
+    "exec",
+    "-T",
+    "api",
+    "node",
+    "--eval",
+    "fetch(`http://api:${process.env.API_PORT}/v1/chat/conversation`).then((response) => " +
+      "console.log(response.status))",
+  ]);
+  assert.equal(apiChat, "503", "the API's chat route answers 503 with the chat off");
   if (BROWSER) await runBrowser("off");
 
   step("the health route reports each failing part");
@@ -805,6 +817,8 @@ try {
 } finally {
   if (siteverify !== null) spawnSync("docker", ["rm", "--force", siteverify], { stdio: "ignore" });
   try {
+    // With the AI service's profile active again, so the stopped container is removed too.
+    env.COMPOSE_PROFILES = "ai-service";
     compose(["down", "--volumes", "--remove-orphans"]);
   } catch (error) {
     process.exitCode = 1;
