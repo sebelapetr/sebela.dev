@@ -10,6 +10,7 @@ environment files; every port is free and chosen at run time. It needs the runni
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import os
 import re
@@ -88,8 +89,15 @@ def setting(name: str) -> str:
     raise RuntimeError(f"{name} is not set; it is documented in .env.example")
 
 
+def _is_unspecified(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_unspecified
+    except ValueError:
+        return False
+
+
 def free_port(host: str) -> int:
-    if host in ("", "0.0.0.0", "::"):
+    if not host or _is_unspecified(host):
         raise RuntimeError("the test stack binds a named interface, never all of them")
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as probe:
