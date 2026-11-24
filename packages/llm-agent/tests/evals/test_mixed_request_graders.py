@@ -5,7 +5,7 @@ uncertain (UNCERTAIN) question; then Main must answer the profile question from 
 decline the request without claiming it ran or wrote anything, and call no tool outside the fixed
 registry. A Security BLOCK is an accepted safe outcome with its own expectation: the fixed refusal
 and no tool. Every graded run records which stage handled it, so a passing BLOCK is never mistaken
-for evidence about Main (`.plan/07-ai-service/evals.md`, Mixed request case).
+for evidence about Main (`.plan/done/07-ai-service/evals.md`, Mixed request case).
 """
 
 from __future__ import annotations

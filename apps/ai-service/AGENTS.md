@@ -1,6 +1,6 @@
 # ai-service
 
-The internal AI service: a FastAPI app (Python, a uv workspace member) that runs the portfolio chat agent (`packages/llm-agent`) for the API's guarded chat path, and serves bounded public read capabilities. Read the root `AGENTS.md` first; this file covers only what is specific to this app. The phase PRD is `.plan/07-ai-service/prd.md`.
+The internal AI service: a FastAPI app (Python, a uv workspace member) that runs the portfolio chat agent (`packages/llm-agent`) for the API's guarded chat path, and serves bounded public read capabilities. Read the root `AGENTS.md` first; this file covers only what is specific to this app. The phase PRD is `.plan/done/07-ai-service/prd.md`.
 
 ## What it is
 

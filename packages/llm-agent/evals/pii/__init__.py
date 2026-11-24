@@ -3,7 +3,7 @@
 `corpus.json` holds fictional EN/CS texts with labelled spans written `[[category:value]]`;
 `floors.json` holds the acceptance floors and the corpus digest they were frozen with. Both were
 written before the first implementation and before any detector candidate was compared: a
-candidate is measured against them, never the other way round (`.plan/07-ai-service/evals.md`,
+candidate is measured against them, never the other way round (`.plan/done/07-ai-service/evals.md`,
 Local detector selection and measurements).
 
 Scoring, per language and per category, never one anonymity percentage:

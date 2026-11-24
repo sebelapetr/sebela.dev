@@ -149,7 +149,7 @@ Phases 00–05, 09 and 10 have merged into `master`, and the site is deployed at
 | **04 · AI Roadmap**         | Learning domain, diary, books, events and roadmap pages                            | [AI Roadmap](.plan/done/04-ai-roadmap/prd.md)                                      |
 | **05 · Admin MCP**          | Secured content-management tools and content skills                                | [Admin MCP](.plan/done/05-mcp-admin/prd.md)                                        |
 | **06 · LLM agent**          | Three-stage Python library, structured API tools and evals                         | [LLM agent](.plan/done/06-llm-agent/prd.md)                                        |
-| **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                         | [AI service](.plan/07-ai-service/prd.md)                                           |
+| **07 · AI service**         | FastAPI and real web chat with conversation/spend controls                         | [AI service](.plan/done/07-ai-service/prd.md)                                      |
 | **07.1 · Jev gateway**      | A measured Jev classifier for the Security Gateway behind a switchable adapter     | [Jev gateway](.plan/07.1-jev-gateway/prd.md)                                       |
 | **08 · Public MCP**         | Read-only Python adapter, structured results and setup page                        | [Public MCP](.plan/08-mcp-public/prd.md)                                           |
 | **09 · RAG**                | Approved-source ingest, private originals, embeddings and private retrieval        | [RAG](.plan/done/09-rag/prd.md)                                                    |
