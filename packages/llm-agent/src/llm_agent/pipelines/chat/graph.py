@@ -1,4 +1,6 @@
-"""The LangGraph flow of one turn: security, then (on ALLOW or UNCERTAIN) main, then output.
+"""The LangGraph flow of one turn: security, then main unless the verdict blocks, then output.
+
+A verdict blocks when it is `BLOCK`, or `UNCERTAIN` in the `abuse` category (`Verdict.blocks`).
 
 Every path ends in the Output Guard. A stage that stops the execution records the stop in the state
 and the flow goes straight to the guard, which turns it into a fixed response.
@@ -48,7 +50,7 @@ async def _output(state: ChatState, config: RunnableConfig) -> dict[str, Any]:
 
 def _after_security(state: ChatState) -> Literal["main", "output"]:
     verdict = state.get("verdict")
-    if state.get("stopped") is None and verdict is not None and verdict.verdict != "BLOCK":
+    if state.get("stopped") is None and verdict is not None and not verdict.blocks:
         return "main"
     return "output"
 

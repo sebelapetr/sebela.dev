@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from llm_agent import ChatAgent, ChatRequest, ChatResult, ExecutionLimits, versions
+from llm_agent.guardrails.policies import text as fixed_text
 from llm_agent.models.gateway import RETRY_BACKOFF_S
 from llm_agent.pipelines.chat.stages.main_agent import DRAFT_SCHEMA
 from llm_agent.pipelines.chat.state import Verdict
@@ -360,6 +361,55 @@ async def test_an_admin_write_request_is_refused_without_claiming_execution() ->
     assert "updated" not in result.text.casefold()
 
 
+#: A message that mixes abusive text with a profile question; the scripted verdict decides, so the
+#: words only need to be fictional placeholders.
+MIXED_ABUSE = {
+    "en": "[abusive remark about a group]. Anyway, where has Ilsa Marrow worked?",
+    "cs": "[urážlivá poznámka o skupině]. Ale jinak, kde Ilsa Marrow pracovala?",
+}
+
+
+@pytest.mark.parametrize("language", ["en", "cs"])
+async def test_an_uncertain_verdict_in_the_abuse_category_is_refused_as_a_whole(
+    language: str,
+) -> None:
+    """Abuse has no partial answer (#455): the message never reaches Main or a tool."""
+    models = ScriptedModels(
+        security=[verdict("UNCERTAIN", "abuse", "hateful_text_with_profile_question")],
+        main=[tools("list_experiences"), draft()],
+    )
+    result = await run(models, MIXED_ABUSE[language])
+    assert result.outcome == "refused"
+    assert result.reason == "blocked_abuse"
+    assert result.language == language
+    assert result.text == fixed_text("out_of_scope", language)
+    assert result.contact is None
+    assert result.sources == []
+    assert result.evidence == []
+    assert models.stage_calls("main") == []
+    assert spans(result) == [
+        ("model.security", "ok"),
+        ("stage.security", "ok"),
+        ("stage.output", "ok"),
+    ]
+    # The trace keeps the classifier's verdict as it was given.
+    attributes = span(result, "stage.security").attributes
+    assert (attributes["verdict"], attributes["category"]) == ("UNCERTAIN", "abuse")
+
+
+@pytest.mark.parametrize("category", ["none", "injection", "prompt_extraction", "admin_write"])
+async def test_an_uncertain_verdict_outside_abuse_still_runs_the_restricted_main_stage(
+    category: str,
+) -> None:
+    models = ScriptedModels(
+        security=[verdict("UNCERTAIN", category, "ambiguous")],
+        main=[tools("get_profile"), draft()],
+    )
+    result = await run(models)
+    assert result.outcome == "answered"
+    assert len(models.stage_calls("main")) == 2
+
+
 async def test_a_provider_refusal_of_the_classifier_blocks() -> None:
     models = ScriptedModels(security=[refusal()])
     result = await run(models)
@@ -377,6 +427,7 @@ REPLACED = "reason_replaced"
 VERDICT_OUTCOMES = [
     ("ALLOW", "none", "answered"),
     ("UNCERTAIN", "injection", "answered"),
+    ("UNCERTAIN", "abuse", "refused"),
     ("BLOCK", "injection", "refused"),
 ]
 
