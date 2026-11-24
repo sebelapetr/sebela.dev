@@ -215,3 +215,34 @@ def test_the_trace_detector_folder_is_read_as_an_absolute_path(tmp_path: Path) -
 def test_the_trace_detector_folder_must_be_absolute() -> None:
     with pytest.raises(ConfigError, match="AI_SERVICE_TRACE_DETECTOR_DIR"):
         Settings.from_env(env(**LANGFUSE, AI_SERVICE_TRACE_DETECTOR_DIR="models/ner"))
+
+
+def test_the_fictional_model_is_refused_in_the_production_storage_environment() -> None:
+    with pytest.raises(ConfigError, match="AI_SERVICE_MODEL") as refused:
+        Settings.from_env(env(AI_SERVICE_ENVIRONMENT="production"))
+    assert "fictional" in str(refused.value)
+
+
+@pytest.mark.parametrize("environment", ["production", " Production "])
+def test_an_explicit_fictional_model_is_refused_in_production_too(environment: str) -> None:
+    with pytest.raises(ConfigError, match="AI_SERVICE_MODEL"):
+        Settings.from_env(env(AI_SERVICE_MODEL="fake", AI_SERVICE_ENVIRONMENT=environment))
+
+
+@pytest.mark.parametrize("environment", ["development", "test", "smoke", "-"])
+def test_the_fictional_model_runs_in_every_other_storage_environment(environment: str) -> None:
+    settings = Settings.from_env(env(AI_SERVICE_ENVIRONMENT=environment))
+    assert settings.model == "fake"
+
+
+def test_the_paid_model_is_accepted_in_the_production_storage_environment() -> None:
+    settings = Settings.from_env(
+        env(
+            AI_SERVICE_MODEL="anthropic",
+            AI_SERVICE_ALLOW_PAID="true",
+            AI_SERVICE_DAILY_CEILING_USD="0.2",
+            ANTHROPIC_API_KEY="provider-key",
+            AI_SERVICE_ENVIRONMENT="production",
+        )
+    )
+    assert settings.model == "anthropic"

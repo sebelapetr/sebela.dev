@@ -318,6 +318,9 @@ services:
       # The same tokens as the API's, so the pair always matches.
       AI_SERVICE_TOKEN: ${API_AI_SERVICE_TOKEN:-}
       AI_SERVICE_CONTROL_TOKEN: ${API_AI_CONTROL_TOKEN:-}
+      # The label of the environment, the API's: with `production` the service refuses the fictional
+      # model, so an empty provider setting can never look like a working chat.
+      AI_SERVICE_ENVIRONMENT: ${STORAGE_ENVIRONMENT:-}
       AI_SERVICE_MODEL: ${AI_SERVICE_MODEL:-}
       AI_SERVICE_FAKE_SCENARIO: ${AI_SERVICE_FAKE_SCENARIO:-}
       AI_SERVICE_ALLOW_PAID: ${AI_SERVICE_ALLOW_PAID:-}
