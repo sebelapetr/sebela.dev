@@ -31,7 +31,7 @@ Do not change code outside your area unless the issue requires it; if it does, s
    - Test-first is mandatory here: API contracts, services, authentication and bug fixes. Write the test, see it fail, then implement.
    - Integration tests run against a real Postgres, never a mocked database.
    - Every write is a private route protected by an API key. Controllers stay thin; domain logic lives in services; SQL lives in repositories.
-3. Make small commits in Conventional Commits form. Where test-first is mandatory, commit the failing test before the implementation.
+3. Make small commits in Conventional Commits form. Append the trailer lines the brief gives, verbatim; never write your own model name in one (`docs/git-workflow.md`, Commits). Where test-first is mandatory, commit the failing test before the implementation.
 4. Update the documentation in the same branch when you change behaviour or structure.
 5. Before you finish, run lint, typecheck, tests and build for what you changed. All must be green.
 6. Browser tests: only the website spec files your change adds or touches (`pnpm --filter @sebela/web test:e2e e2e/<name>.spec.ts` after building); none when your change cannot change the website. Never run the whole suite; CI runs it before the merge (`docs/testing.md`, Browser tests by role).

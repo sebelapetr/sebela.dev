@@ -52,3 +52,21 @@ describe("pnpm in the images", () => {
     }
   });
 });
+
+describe("npm in the runtime stage", () => {
+  // npm only installs pnpm, in the stage that builds; the running image does not ship it, so the
+  // npm the Node.js base image bundles (and every package inside it) is no part of what runs and is
+  // scanned (docs/release-workflow.md, Image scan).
+  it("is removed in every image's runtime stage", () => {
+    for (const file of dockerfiles) {
+      const text = readFileSync(path.join(root, file), "utf8");
+      const runtime = text.split(/^FROM .* AS runtime$/m)[1];
+      assert.ok(runtime, `${file} has no runtime stage`);
+      assert.match(
+        runtime,
+        /^RUN rm -rf \/usr\/local\/lib\/node_modules\/npm \/usr\/local\/bin\/npm \/usr\/local\/bin\/npx$/m,
+        `${file}: the runtime stage must remove the bundled npm`,
+      );
+    }
+  });
+});

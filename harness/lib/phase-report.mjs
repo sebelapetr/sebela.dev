@@ -3,6 +3,7 @@
 // (harness/phase-report.mjs). Intent: docs/agents.md, "The phase report".
 
 import { toolCalls } from "./progress.mjs";
+import { workLines } from "./selection.mjs";
 
 function parseResult(stdout) {
   const text = String(stdout ?? "").trim();
@@ -57,7 +58,9 @@ const duration = (minutes) =>
   minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 const sum = (values) => values.reduce((total, value) => total + (value ?? 0), 0);
 
-export function renderReport({ phase, iterations, steward, memory, suggestions }) {
+// `work` is the phase's work selection when the report is written (lib/selection.mjs), null when
+// GitHub could not be asked.
+export function renderReport({ phase, iterations, steward, memory, suggestions, work = null }) {
   const out = [`# Phase report: ${phase}`, ""];
   const merged = iterations.filter((it) => it.outcome === "merged");
   out.push(
@@ -87,6 +90,11 @@ export function renderReport({ phase, iterations, steward, memory, suggestions }
       `Iterations without a finished issue (interrupted, crashed, usage limit, phase done): ${other.map((it) => `${it.outcome} ${formatCost(it) || "no result"}`).join("; ")}.`,
     );
   }
+
+  // What the tracking issue shows now: progress, and every open issue with why it is not done.
+  out.push("", "## What is left", "");
+  if (work) for (const line of workLines(work)) out.push(`- ${line}`);
+  else out.push("Unknown: the phase's tracking issue could not be read.");
 
   // The spend line the loop logged with each iteration (harness/lib/spend.mjs): the state at the
   // last one, and every iteration that paid for model evals.

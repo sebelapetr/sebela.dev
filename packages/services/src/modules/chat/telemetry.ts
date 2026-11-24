@@ -58,7 +58,14 @@ export function readTelemetryDeletionOptions(
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error("API_LANGFUSE_BASE_URL is not an absolute http(s) address.");
   }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), publicKey, secretKey };
+  return { baseUrl: withoutTrailingSlashes(baseUrl), publicKey, secretKey };
+}
+
+/** `value` without its trailing slashes, in linear time (a regular expression here backtracks). */
+function withoutTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return value.slice(0, end);
 }
 
 /** Milliseconds a `Retry-After` value asks to wait, or `null` when it names nothing usable. */
@@ -80,7 +87,7 @@ function retryAfterMs(value: string | null, now: Date): number | null {
 export function createLangfuseTraceDeleter(options: LangfuseTraceDeleterOptions): ChatTraceDeleter {
   const send = options.fetch ?? fetch;
   const now = options.now ?? (() => new Date());
-  const url = `${options.baseUrl.replace(/\/+$/, "")}/api/public/traces`;
+  const url = `${withoutTrailingSlashes(options.baseUrl)}/api/public/traces`;
   const authorization = `Basic ${Buffer.from(`${options.publicKey}:${options.secretKey}`).toString("base64")}`;
   return {
     async deleteTraces(traceIds): Promise<ChatTraceDeletionResult> {

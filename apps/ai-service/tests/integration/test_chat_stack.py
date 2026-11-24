@@ -82,13 +82,15 @@ def _environment_files() -> list[dict[str, str]]:
 def setting(name: str) -> str:
     """A setting from the process environment, then the checkout's files; never a default."""
     for source in (os.environ, *_environment_files()):
-        value = source.get(name, "").strip()
-        if value:
-            return value
+        found = source.get(name)
+        if found is not None and found.strip():
+            return found.strip()
     raise RuntimeError(f"{name} is not set; it is documented in .env.example")
 
 
 def free_port(host: str) -> int:
+    if host in ("", "0.0.0.0", "::"):
+        raise RuntimeError("the test stack binds a named interface, never all of them")
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as probe:
         probe.bind((host, 0))

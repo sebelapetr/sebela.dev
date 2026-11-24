@@ -47,7 +47,7 @@ name="$(date -u -d "@$now" +%Y%m%dT%H%M%SZ).dump.age"
 # --- Dump and encrypt ------------------------------------------------------------------------------
 
 # Extensions are left out: they belong to the superuser, and restore.sh creates pgvector itself.
-say "dumping and encrypting $DATABASE_NAME"
+say "dumping and encrypting the database"
 compose exec -T postgres pg_dump --username "$POSTGRES_USER" --dbname "$DATABASE_NAME" \
   --format custom --no-owner --no-privileges '--exclude-extension=*' </dev/null |
   age --encrypt --recipient "$BACKUP_AGE_RECIPIENT" --output "$work/$name" ||

@@ -62,6 +62,12 @@ describe("clearing the demo content", () => {
     ]);
   });
 
+  it("prints no database name into its log", async () => {
+    const result = await clear(["--confirm", "fictional_site"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr.includes("fictional_site"), false, "no database name in the log");
+  });
+
   it("clears nothing when the backup fails", async () => {
     const result = await clear(["--confirm", "fictional_site"], { FICTIONAL_BACKUP_STATUS: "1" });
     assert.notEqual(result.status, 0);
