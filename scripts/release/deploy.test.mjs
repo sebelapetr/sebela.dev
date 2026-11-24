@@ -14,6 +14,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { GIT_ENV, createCheckout } from "./fixtures/deploy-checkout.mjs";
+import { deployInput as workflowInput } from "./deployment.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const FAKE_DOCKER = path.join(import.meta.dirname, "fixtures", "fake-docker");
@@ -759,5 +760,55 @@ describe("the AI service", () => {
     const result = deploy(deployInput(B));
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(releases(), [`api=${A} web=${A} mcp-admin=${A}`, line(B)]);
+  });
+});
+
+// The forced command runs the script the server has checked out, which validates the input before
+// it brings the checkout to the release commit. The first release that carries this script is
+// therefore deployed by the previous one (fixtures/deploy-previous.sh, a copy of it): the
+// release job sends the input that script accepts, and the new script, checked out and run
+// again, accepts it too. Only later, when the owner sets DEPLOY_AI_SERVICE_INPUT, does the input
+// name the AI service.
+describe("the transition from the previous script", () => {
+  const previous = path.join(import.meta.dirname, "fixtures", "deploy-previous.sh");
+  const tags = { api: B, web: B, "mcp-admin": B, "ai-service": B };
+  const old = `api=${A} web=${A} mcp-admin=${A}`;
+
+  beforeEach(() => {
+    const sub = path.join(dir, "transition");
+    fs.mkdirSync(sub);
+    repo = createCheckout(sub, { oldScript: previous });
+  });
+
+  it("refuses the input that names the AI service, so the release job must not send it yet", () => {
+    record(old);
+    scenario({ migrations: MIGRATIONS });
+    const input = workflowInput(tags, repo.commits.release);
+    const result = deploy(input, { ssh: true });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /usage|unknown service/);
+    assert.equal(repo.head(), repo.commits.old, "the checkout never moves");
+  });
+
+  it("deploys through the previous script with the input the release job sends first", () => {
+    record(old);
+    scenario({ migrations: MIGRATIONS });
+    const input = workflowInput(tags, repo.commits.release, { aiService: false });
+    const result = deploy(input, { ssh: true });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(repo.head(), repo.commits.release, "the previous script checked it out");
+    assert.deepEqual(starts(), ["old", "release"], "then the new script ran");
+    assert.deepEqual(releases(), [old, `api=${B} web=${B} mcp-admin=${B}`]);
+  });
+
+  it("then accepts the input that names the AI service", () => {
+    record(old);
+    scenario({ migrations: MIGRATIONS });
+    const first = workflowInput(tags, repo.commits.release, { aiService: false });
+    assert.equal(deploy(first, { ssh: true }).status, 0);
+    const full = workflowInput({ ...tags, "ai-service": C }, repo.commits.release);
+    const result = deploy(full, { ssh: true });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(releases().at(-1), `api=${B} web=${B} mcp-admin=${B} ai-service=${C}`);
   });
 });

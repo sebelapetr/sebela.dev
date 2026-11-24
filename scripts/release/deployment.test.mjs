@@ -35,6 +35,20 @@ describe("deploy input", () => {
     );
   });
 
+  it("can leave the AI service out, for a server whose script predates it", () => {
+    const input = deployInput(
+      { "ai-service": sha("d"), "mcp-admin": sha("c"), web: sha("b"), api: sha("a") },
+      release,
+      { aiService: false },
+    );
+    assert.equal(
+      input,
+      `deploy release=${release} api=${sha("a")} web=${sha("b")} mcp-admin=${sha("c")}`,
+    );
+    // The previous script refuses more than 200 characters; the input stays within its limit.
+    assert.ok(input.length <= 200, String(input.length));
+  });
+
   const tags = { api: sha("a"), web: sha("b"), "mcp-admin": sha("c"), "ai-service": sha("d") };
   const invalidReleases = {
     "a missing release commit": undefined,
