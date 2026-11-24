@@ -397,7 +397,9 @@ async def test_an_uncertain_verdict_in_the_abuse_category_is_refused_as_a_whole(
     assert (attributes["verdict"], attributes["category"]) == ("UNCERTAIN", "abuse")
 
 
-@pytest.mark.parametrize("category", ["none", "injection", "prompt_extraction", "admin_write"])
+@pytest.mark.parametrize(
+    "category", ["none", "off_topic", "injection", "prompt_extraction", "admin_write"]
+)
 async def test_an_uncertain_verdict_outside_abuse_still_runs_the_restricted_main_stage(
     category: str,
 ) -> None:
