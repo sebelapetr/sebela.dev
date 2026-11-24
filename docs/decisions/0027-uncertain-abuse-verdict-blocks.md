@@ -25,5 +25,6 @@ The rule is enforced as deterministic routing in `packages/llm-agent`, not in th
 ## Consequences
 
 - Residual risk: a mixed message that Security labels `ALLOW`, or `UNCERTAIN` in another category, still reaches Main, which can only decline it by rule 8 of the chat prompt (`docs/threat-model.md`, row 8).
+- Trade-off: every `UNCERTAIN` `abuse` verdict is now refused, so an on-topic question in an abusive tone that Security marks `UNCERTAIN` `abuse` is falsely blocked rather than answered by the restricted Main stage. This false blocking is new and unmeasured: the false-blocking cases Q19 and Q20 are polite, and no eval case sends a rude but legitimate question.
 - The eval grader's `on_block` path checks only a raw `BLOCK` verdict; the C09–C11 cases grade the refusal itself, so no grader change was needed.
 - The runtime fingerprint changed (`ff74122efcb8` → `7f5f7fbd340e`), so answers stored before this change are not compatible with it.
