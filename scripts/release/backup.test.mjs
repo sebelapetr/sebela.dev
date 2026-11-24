@@ -13,6 +13,7 @@ import {
   createSandbox,
   HEARTBEAT_ID,
   PASSWORD,
+  SITE,
   RECIPIENT,
   script,
 } from "./fixtures/backup-sandbox.mjs";
@@ -116,6 +117,13 @@ describe("a backup", () => {
     assert.ok(taken >= before - 1000 && taken <= after, `${name} is the time of the backup`);
   });
 
+  it("prints no setting's value, such as the database name, into its log", async () => {
+    const result = await backup();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr.includes(SITE), false, "no database name in the log");
+    assert.equal(result.stdout.includes(SITE), false, "no database name in the output");
+  });
+
   it("leaves no dump behind on the server", async () => {
     assert.equal((await backup()).status, 0);
     assert.deepEqual(sandbox.leftovers(), []);
@@ -176,6 +184,8 @@ describe("the settings", () => {
     const result = await backup({ env: { DEPLOY_ENV_FILE: path.join(dir, "absent.env") } });
     assert.notEqual(result.status, 0);
     assert.deepEqual(result.calls, []);
+    assert.equal(result.stderr.includes("absent.env"), false, "the message names no path");
+    assert.match(result.stderr, /DEPLOY_ENV_FILE|BACKUP_ENV_FILE/);
   });
 
   for (const [name, value] of [

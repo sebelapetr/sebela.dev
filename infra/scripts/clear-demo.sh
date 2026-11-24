@@ -30,10 +30,10 @@ load DATABASE_NAME "$IDENTIFIER_PATTERN"
   fail "the confirmation does not match DATABASE_NAME; nothing was backed up or cleared"
 
 BACKUP="${CLEAR_BACKUP:-$SCRIPT_DIR/backup.sh}"
-say "backing up $DATABASE_NAME first"
+say "backing up the database first"
 "$BACKUP" </dev/null || fail "the backup failed; nothing was cleared"
 
-say "clearing the demo content of $DATABASE_NAME"
+say "clearing the demo content of the database"
 compose exec -T api node dist/cli/clear-content.js --confirm "$DATABASE_NAME" </dev/null ||
   fail "clearing the content failed; the backup just taken holds what was there"
 say "done: the database is empty and migrated"

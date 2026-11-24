@@ -6,8 +6,9 @@
 //                                       [--max-failures 3] [--max-iterations 50] [--no-notify]
 //                                       [--note "<text for the orchestrator>"]
 //
-// It holds no state of its own: what is done is read from GitHub by the orchestrator each time,
-// so the loop can be stopped (Ctrl+C) and started again at any point.
+// It holds no state of its own: what is done and what is next is read from GitHub each time — the
+// phase's tracking issue, its sub-issues in order and their native blockers (phase-work.mjs) — so
+// the loop can be stopped (Ctrl+C) and started again at any point.
 
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -24,22 +25,25 @@ import {
   noteAfter,
   ownerNoteSection,
   phaseEnd,
+  phaseNotStarted,
   spendComment,
   stewardStop,
 } from "./lib/loop.mjs";
 import { newProblem, notify } from "./lib/notify.mjs";
 import { currentWork, workChange } from "./lib/progress.mjs";
 import { formatCost, iterationStats } from "./lib/phase-report.mjs";
+import { PhaseWorkError } from "./lib/selection.mjs";
 import { spendChange, spendLine } from "./lib/spend.mjs";
 import { writePhaseReport } from "./phase-report.mjs";
+import { phaseWorkOrNull } from "./phase-work.mjs";
 import { checkReadiness } from "./preflight.mjs";
 import { quiet, readLines, transcriptDir } from "./run-tools.mjs";
 import {
   checkOnce,
   failedIssues,
   keptRunsFile,
-  phaseProgressNow,
   phaseSpend,
+  phaseWorkNow,
   stopsBeforeIteration,
 } from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
@@ -89,7 +93,9 @@ function alert(options, lines) {
   if (options.notify) notify({ title: `sebela.dev · ${options.phase}`, lines });
 }
 
-function prompt({ phase, base, note }) {
+// `command` is the work selection's program by the absolute path of the checkout the loop runs
+// from: an agent whose shell sits in a worktree cut before that program existed still finds it.
+function prompt({ phase, base, note, command }) {
   return `You are running unattended in the phase loop.
 
 Phase: ${phase}
@@ -98,10 +104,14 @@ Base branch: ${base}
 
 Handle exactly ONE issue, following your agent definition, docs/agents.md and docs/git-workflow.md:
 
-1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it.
-2. Pick the next open issue labelled \`phase:${phase}\` and \`ready-for-agent\` whose blockers are closed. Skip issues labelled \`hitl\` or \`agent-failed\`. Always read the issue with its comments (\`gh issue view <n> --comments\`): an \`Owner note\` there is binding, and you pass every owner note to the developer and the reviewer as written. An issue labelled \`agent-retry\` failed once before: its comments say why. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
+1. Run \`git fetch origin\`. If phase/${phase} does not exist on origin, create it from origin/${base} and push it — but only once step 2 has said \`status: next\`, \`finished\` or \`waiting\`: do step 2 first.
+2. Ask which issue is next: \`node ${command} next ${phase}\` (the same file as \`node harness/phase-work.mjs\` in the main checkout; use this path, so the command is found wherever your shell is). It reads the phase's tracking issue on GitHub and always prints a line \`status: <status>\`. Act on that line only:
+   - \`status: next\`: the line \`next: #<n> <title>\` names the issue — the first open sub-issue, in sub-issue order, that is labelled \`ready-for-agent\`, is not labelled \`hitl\` or \`agent-failed\`, has no sub-issues of its own and whose native blockers are all closed. Take exactly that issue, with step 3.
+   - \`status: finished\` (every sub-issue is closed) or \`status: waiting\` (the open sub-issues wait for a human, are blocked, failed or not released): go to step 4.
+   - \`status: phase-waits\` or \`status: empty\`, no \`status:\` line at all, an empty answer or a failing command: the phase must not be worked on or ended. Change nothing — no branch, no archive, no pull request — and report interrupted with cause environment and what the command printed.
+   Never choose an issue yourself by a label, by issue number or from a \`## Blocked by\` text, and never take an issue the command lists as blocked, waiting for a human, agent-failed or not ready. Always read the named issue with its comments (\`gh issue view <n> --comments\`): an \`Owner note\` there is binding, and you pass every owner note to the developer and the reviewer as written. If the issue's text (its \`## When\` section) or an owner note says the issue must still wait — for a merge, a date, a decision — do not start it and do not take a different issue instead: comment on the issue what it waits for and report interrupted with cause environment, so the owner decides. An issue labelled \`agent-retry\` failed once before: its comments say why. An issue may also have unfinished work from an interrupted run: if a branch \`*/<issue>-*\` or its worktree exists, continue it rather than starting over.
 3. Take it through to an issue pull request against phase/${phase}, reviewed and with green CI, and squash-merge it. Then close the issue, run the docs-keeper and remove the worktree with its branch.
-4. If no such issue is left, archive the plan once (docs/git-workflow.md, Phase pull request: \`git mv .plan/${phase} .plan/done/${phase}\` and update the references, on a short-lived branch merged into phase/${phase}; skip it when the folder is already in .plan/done/), then open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. If GitHub refuses the pull request (for example because the phase branch has no commits beyond ${base}), still report phase_done and say why in the summary. Never mark it ready for review, close or reopen it, whatever state you find it in: the owner switches it when the phase is complete, HITL issues included, which starts its paid model evals once. The guard refuses those commands.
+4. The phase end, only after \`status: finished\` or \`status: waiting\`: archive the plan once (docs/git-workflow.md, Phase pull request: \`git mv .plan/${phase} .plan/done/${phase}\` and update the references, on a short-lived branch merged into phase/${phase}; skip it when the folder is already in .plan/done/), then open the phase pull request from phase/${phase} to ${base} as a draft (\`gh pr create --draft\`), or update it if it exists, and report phase_done. If GitHub refuses the pull request (for example because the phase branch has no commits beyond ${base}), still report phase_done and say why in the summary. Never mark it ready for review, close or reopen it, whatever state you find it in: the owner switches it when the phase is complete, HITL issues included, which starts its paid model evals once. The guard refuses those commands.
 5. If the issue cannot be finished, comment on the issue with what happened and why, remove the worktree, and report failed. Do not change labels; the loop does that.
 6. If the work on the issue stops for a reason outside the issue, keep its worktree and branch, comment on the issue what is done and what remains, and report interrupted with its cause:
    - usage_limit: the usage limit was reached. The loop waits and continues the same issue.
@@ -181,7 +191,7 @@ function runOrchestrator({
 }) {
   const args = [
     "-p",
-    prompt({ phase, base, note }),
+    prompt({ phase, base, note, command: path.join(mainRoot, "harness", "phase-work.mjs") }),
     "--agent",
     "orchestrator",
     "--output-format",
@@ -315,27 +325,6 @@ function phasePullRequest(phase, base) {
   if (out === null) return undefined;
   const [pr] = JSON.parse(out);
   return pr ? { number: pr.number } : null;
-}
-
-// The phase's open issues with their label names, or null when gh fails.
-function openPhaseIssues(phase) {
-  const out = quiet("gh", [
-    "issue",
-    "list",
-    "--label",
-    `phase:${phase}`,
-    "--state",
-    "open",
-    "--limit",
-    "200",
-    "--json",
-    "number,labels",
-  ]);
-  if (out === null) return null;
-  return JSON.parse(out).map((issue) => ({
-    number: issue.number,
-    labels: issue.labels.map((label) => label.name),
-  }));
 }
 
 // Why the loop stops, for the log and the notification.
@@ -517,7 +506,30 @@ async function main() {
     }
     const spendBefore = spendNow();
     if (iteration === 1) log(spendLine(spendBefore, null));
-    const progress = phaseProgressNow(options.phase);
+    // The phase's issues are read from its tracking issue on GitHub, every time. A folder that
+    // no tracking issue names, or that several name, cannot be worked on: stop before an agent
+    // guesses. GitHub not answering is only said; the orchestrator asks again itself.
+    let work;
+    try {
+      work = phaseWorkOrNull(options.phase);
+    } catch (error) {
+      if (!(error instanceof PhaseWorkError)) throw error;
+      log(`${RED}not ready: ${error.message}${RESET}`);
+      alert(options, ["the loop cannot start an iteration", error.message]);
+      process.exitCode = 1;
+      return;
+    }
+    if (!work) log(`${YELLOW}warning: could not read the phase's issues from GitHub${RESET}`);
+    // A phase that has not started is not given to an agent, which would cut its branch and end
+    // it: one whose tracking issue waits for another phase, and one without any issue.
+    const notStarted = phaseNotStarted(work);
+    if (notStarted) {
+      log(`${RED}not ready: ${notStarted}${RESET}`);
+      alert(options, ["the loop cannot start an iteration", notStarted]);
+      process.exitCode = 1;
+      return;
+    }
+    const progress = work?.progress;
     const done = progress ? ` (${progress.closed}/${progress.total} issues closed)` : "";
     log(`iteration ${iteration}: starting the orchestrator for ${options.phase}${done}`);
     const sessionId = randomUUID();
@@ -630,7 +642,7 @@ async function main() {
       // The report says the phase is done; GitHub says whether a pull request exists and what is left.
       const end = phaseEnd({
         pullRequest: phasePullRequest(options.phase, options.base),
-        openIssues: openPhaseIssues(options.phase),
+        work: phaseWorkNow(options.phase),
       });
       for (const line of end.log) log(line);
       const report = await writePhaseReport({ mainRoot, phase: options.phase }).catch((error) =>

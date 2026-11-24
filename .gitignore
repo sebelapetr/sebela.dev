@@ -1,6 +1,6 @@
 .context/*
 !.context/README.md
-node_modules/
+node_modules
 .env
 .env.*
 !.env.example

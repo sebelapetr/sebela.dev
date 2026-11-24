@@ -1,18 +1,25 @@
 ---
 name: to-issues
-description: Break a phase PRD from .plan/ into independently-grabbable GitHub issues using tracer-bullet vertical slices. Use when the user wants to convert a PRD or plan into issues or implementation tickets.
+description: Break a phase PRD from .plan/ into independently-grabbable GitHub issues using tracer-bullet vertical slices, published as ordered sub-issues of the phase's tracking issue with native blockers and a milestone. Use when the user wants to convert a PRD or plan into issues or implementation tickets.
 ---
 
 # To Issues
 
 Break a plan into independently-grabbable issues using vertical slices (tracer bullets).
 
-Adapted from the `to-issues` skill in mattpocock/skills. Differences for this repository: the tracker is GitHub Issues (via the `gh` CLI), the source is a PRD file in `.plan/`, and the acceptance criteria follow the rules in `AGENTS.md`.
+Adapted from the `to-issues` skill in mattpocock/skills. Differences for this repository: the tracker is GitHub Issues (via the `gh` CLI) with a tracking issue, ordered sub-issues and native blockers per phase, the source is a PRD file in `.plan/`, and the acceptance criteria follow the rules in `AGENTS.md`.
 
-## Tracker and labels
+## Tracker and structure
 
 - Tracker: GitHub Issues of this repository, managed with `gh`.
-- Labels: `phase:NN-<phase>` or `phase:NN.M-<name>` for a sub-phase (matches the `.plan/` folder), `afk` or `hitl`, and `ready-for-agent` once the user approved the breakdown. Create missing labels with `gh label create`.
+- **A PRD produces a phase.** Of the three kinds of work (`docs/git-workflow.md`, Issues) this skill creates the one with a PRD: a **phase** — one **tracking issue** with the line `Plan: .plan/<folder>`, the phase's issues as its **sub-issues** in the order they are to be worked on, **native blocked-by links** for what must come first, all in the release's **milestone**. The phase loop selects work from this structure alone (`docs/agents.md`, Work selection): a slice that is not a sub-issue of the tracking issue is never worked on, and its place among the sub-issues is its place in the phase.
+- **An epic has no PRD** and is not made by this skill's process. When the user wants a group of related issues without a PRD, a phase branch or a loop, create it by hand: a tracking issue of type `Epic` with **no** `Plan:` line (`gh issue create --type Epic --title "<name>" --milestone "<milestone>"`), and each issue as its sub-issue (`gh issue create --parent <epic> …` or `gh issue edit <epic> --add-sub-issue <n>`). Each of its issues gets its own pull request into `master`.
+- Labels say who may take an issue, not where it belongs: `afk` or `hitl`, and `ready-for-agent` once the user approved the breakdown. A tracking issue carries none of them. They, the plan line, the order and the native blockers are everything the loop reads.
+- **For people, never for the loop** — set them as described, but never rely on them to steer an agent:
+  - **Issue type:** `Phase` for the tracking issue; for each slice `Feature` (new behaviour a user of the site, the API or an MCP server can see; its pull request is a `feat`), `Bug` (fixes wrong behaviour; a `fix`) or `Task` (everything else: documentation, CI, tests, refactoring, evals, acceptance and other owner work). Do not add the labels `bug` or `enhancement`; the type replaces them. Only the owner can create a type. If `gh` refuses `--type <name>` because the type does not exist, create the issue again without `--type`, go on, and tell the user at the end which issues have no type and which type is missing — never stop or fail the breakdown for it.
+  - **Assignee:** a `hitl` slice is assigned to the owner (`--assignee @me`; every agent acts through the owner's account). An `afk` slice gets no assignee.
+  - **Issue fields** (`Priority`, `Start date`, `Target date`, `Effort`): the owner's. Set none unless the PRD or the user gives a value.
+- During the migration only (`docs/git-workflow.md`, Issues): every slice also gets the label `phase:NN-<phase>` (or `phase:NN.M-<name>`; matches the `.plan/` folder; create a missing one with `gh label create`) and a `## Blocked by` section that is a rendering of its native links. Nothing selects by them; drop both when that migration is finished.
 - Publishing issues is outward-facing: only publish after the user approved the breakdown in step 4.
 
 ## Process
@@ -43,14 +50,15 @@ Slices may be 'HITL' or 'AFK'. HITL slices require human interaction, such as an
 Present the proposed breakdown as a numbered list. For each slice, show:
 
 - **Title**: short descriptive name
-- **Type**: HITL / AFK
-- **Blocked by**: which other slices (if any) must complete first
+- **Type**: HITL / AFK, and the issue type: Feature / Bug / Task
+- **Order**: the list is in the order the slices are to be worked on; it becomes the sub-issue order
+- **Blocked by**: which other slices (if any) must complete first; they become native blocked-by links
 - **User stories covered**: which user stories this addresses (if the source material has them)
 
 Ask the user:
 
 - Does the granularity feel right? (too coarse / too fine)
-- Are the dependency relationships correct?
+- Are the order and the dependency relationships correct?
 - Should any slices be merged or split further?
 - Are the correct slices marked as HITL and AFK?
 
@@ -58,9 +66,40 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the issues to GitHub
 
-For each approved slice, create an issue with `gh issue create` using the template below. Publish in dependency order (blockers first) so you can reference real issue numbers in the "Blocked by" field.
+**The order of work is the order of the sub-issues.** Put the approved slices into the order they are to be worked on; a blocker always comes before what it blocks. Publish in that order, so real issue numbers exist when a later slice names its blockers.
 
-Then write `.plan/NN-<phase>/issues.md`: a table of the published issues (number, title, type, blocked by) so the breakdown is readable in the repository without the tracker.
+1. **Find or create the phase's tracking issue.** `node harness/phase-work.mjs phases` lists the open tracking issues with their plan folders. If the phase has none, create it: title `Phase NN · <name>`, type `Phase` (`--type Phase`), no labels, no assignee, the release's milestone, and a body that says it is the tracking issue of the phase, links the PRD and `issues.md`, and has this line on its own, exactly (the harness finds the phase by it):
+
+   ```
+   Plan: .plan/NN-<phase>
+   ```
+
+   The line starts at the first character of a line and has nothing after the folder; it must not sit in a code block or a comment, and no other issue may carry it.
+
+   A phase that must wait for another phase gets a native link between the two tracking issues: `gh issue edit <tracking> --add-blocked-by <other tracking issue>`. Ask the user which phases it waits for; the overview PRD's phase table names the dependencies.
+
+2. **Ask which milestone** the phase belongs to if the tracking issue has none (`gh api "repos/{owner}/{repo}/milestones" --jq '.[].title'`). Every slice gets the same milestone as its tracking issue.
+
+3. **Create each slice, in order,** with the template below, as a sub-issue with its native blockers and the milestone in one command:
+
+   ```
+   gh issue create --title "<title>" --body-file <file> \
+     --parent <tracking issue> --blocked-by <n>,<m> --milestone "<milestone>" \
+     --type <Feature|Bug|Task> \
+     --label afk --label ready-for-agent --label "phase:NN-<phase>"
+   ```
+
+   Leave out `--blocked-by` for a slice without blockers. For a HITL slice use `--label hitl` instead of `afk` and add `--assignee @me`. A new sub-issue goes to the end of the list, so creating the slices in order gives the intended order. The `## Blocked by` section of the body lists exactly the issues given to `--blocked-by`, as `- #<n>` lines, and nothing else: no explanation, no other reference. A condition that is not another issue — a phase merged into `master`, a date, the owner's decision — goes under `## When`, which the orchestrator reads before it starts the issue.
+
+4. **A slice added to a phase later** is created the same way. If its place is not the end, move it: get the node IDs with `gh issue view <n> --json id --jq .id` and run
+
+   ```
+   gh api graphql -f query='mutation($parent: ID!, $issue: ID!, $after: ID!) { reprioritizeSubIssue(input: { issueId: $parent, subIssueId: $issue, afterId: $after }) { issue { number } } }' -f parent=<tracking id> -f issue=<slice id> -f after=<id of the sub-issue it follows>
+   ```
+
+5. **Check the result.** `node harness/phase-work.mjs next NN-<phase>` must print the first slice an agent may take (or say that the phase waits for another phase) and list the others in the intended order with their blockers; `node harness/phase-work.mjs blockers` must report that every `## Blocked by` text and the native blockers agree, and `node harness/phase-work.mjs assignees` that every `hitl` issue is assigned and no other is. Fix what differs — the native links are the truth, the text follows them.
+
+Then write `.plan/NN-<phase>/issues.md`: the tracking issue's number and a table of the published issues in sub-issue order (number, title, type, blocked by) so the breakdown is readable in the repository without the tracker.
 
 <issue-template>
 ## Parent
@@ -84,10 +123,14 @@ Avoid specific file paths or code snippets — they go stale fast. Exception: if
 
 ## Blocked by
 
-- A reference to the blocking issue (if any)
+- #<number of each native blocker, one per line>
 
-Or "None - can start immediately" if no blockers.
+Or "None - can start immediately." if no blockers. During the migration only: this section is a rendering of the issue's native blocked-by links — the list and nothing else.
+
+## When
+
+Only if the slice must wait for something that is not another issue (a merge into `master`, a date, a decision of the owner): what it waits for, in one or two sentences. Leave the section out otherwise.
 
 </issue-template>
 
-Do NOT close or modify any parent issue.
+Do NOT close the tracking issue or change its text beyond what step 5 says, and do not change the order, blockers or labels of issues that already exist unless the user asked for it.

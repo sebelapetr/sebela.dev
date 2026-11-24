@@ -28,7 +28,7 @@ fail() {
 use_env_file() {
   ENV_FILE="${BACKUP_ENV_FILE:-${DEPLOY_ENV_FILE:-}}"
   [[ -n "$ENV_FILE" ]] || fail "set BACKUP_ENV_FILE or DEPLOY_ENV_FILE to the production environment file"
-  [[ -f "$ENV_FILE" && -r "$ENV_FILE" ]] || fail "the environment file cannot be read: $ENV_FILE"
+  [[ -f "$ENV_FILE" && -r "$ENV_FILE" ]] || fail "the environment file named by BACKUP_ENV_FILE or DEPLOY_ENV_FILE cannot be read"
 }
 
 # setting <name>: the last value the environment file gives the name, without surrounding quotes.

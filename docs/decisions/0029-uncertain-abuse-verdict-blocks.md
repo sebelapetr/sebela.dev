@@ -1,4 +1,4 @@
-# 0027 — An uncertain abuse verdict is refused at Security
+# 0029 — An uncertain abuse verdict is refused at Security
 
 Status: accepted
 Date: 2026-11-24

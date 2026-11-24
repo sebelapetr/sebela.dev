@@ -4,7 +4,8 @@
 //   node harness/phase-report.mjs <phase-folder> [--no-model]
 //
 // Reads the loop's logs in .worktrees/logs/<phase>/ and the transcripts they name, and writes
-// report.md next to them: cost and time per issue, review rounds, eval spend, the steward's findings, guard
+// report.md next to them: cost and time per issue, review rounds, what the phase's tracking issue
+// still shows as open, eval spend, the steward's findings, guard
 // refusals and the agent memory that changed. The `retrospective` agent then suggests what of
 // that memory belongs in docs. Rules: lib/phase-report.mjs; intent: docs/agents.md.
 
@@ -13,6 +14,7 @@ import path from "node:path";
 import { countDispatches, iterationStats, renderReport } from "./lib/phase-report.mjs";
 import { summarizeTranscript } from "./lib/steward.mjs";
 import { askAgent, readLines, transcriptDir } from "./run-tools.mjs";
+import { phaseWorkNow } from "./steward.mjs";
 import { mainRootFrom } from "./worktree.mjs";
 
 const ITERATION_LOG = /^\d{4}-.*-\d+\.json$/;
@@ -104,7 +106,14 @@ export async function writePhaseReport({ mainRoot, phase, model = true }) {
   });
   const since = files.length ? fs.statSync(path.join(logDir, files[0])).mtimeMs - 60 * 60_000 : 0;
   const memory = changedMemory(mainRoot, since);
-  const input = { phase, iterations, steward, memory, suggestions: null };
+  const input = {
+    phase,
+    iterations,
+    steward,
+    memory,
+    suggestions: null,
+    work: phaseWorkNow(phase),
+  };
   const draft = renderReport(input);
   const suggestions = model ? await suggest({ mainRoot, phase, report: draft, memory }) : null;
   const file = path.join(logDir, "report.md");
