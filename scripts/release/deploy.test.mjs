@@ -14,6 +14,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { GIT_ENV, createCheckout } from "./fixtures/deploy-checkout.mjs";
+import { deployInput as workflowInput } from "./deployment.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const FAKE_DOCKER = path.join(import.meta.dirname, "fixtures", "fake-docker");
@@ -24,7 +25,8 @@ const A = sha("a");
 const B = sha("b");
 const C = sha("c");
 const D = sha("d");
-const line = (api, web = api, mcp = api) => `api=${api} web=${web} mcp-admin=${mcp}`;
+const line = (api, web = api, mcp = api) =>
+  `api=${api} web=${web} mcp-admin=${mcp} ai-service=${api}`;
 const deployInput = (api, web = api, mcp = api) =>
   `deploy release=${repo.commits.release} ${line(api, web, mcp)}`;
 
@@ -128,6 +130,7 @@ function steps(calls) {
       if (args.includes("pull")) return "pull";
       if (args.includes("run")) return "migrate";
       if (args.includes("up")) return "up";
+      if (args.includes("config")) return "config";
     }
     if (args[0] === "run") return "ls";
     if (args[0] === "image" && args[1] === "ls") return "image-ls";
@@ -213,7 +216,9 @@ describe("input validation", () => {
     record(line(A));
     scenario({ migrations: MIGRATIONS });
     const release = `release=${repo.commits.release}`;
-    const result = deploy(`deploy mcp-admin=${B} ${release} api=${B} web=${B}`, { ssh: true });
+    const result = deploy(`deploy mcp-admin=${B} ${release} api=${B} web=${B} ai-service=${B}`, {
+      ssh: true,
+    });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(releases(), [line(A), line(B)]);
   });
@@ -341,12 +346,14 @@ describe("a deployment", () => {
     const result = deploy(deployInput(B, A, B));
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(
-      steps(result.calls).filter((step) => step !== "ls" && !step.startsWith("image")),
+      steps(result.calls).filter(
+        (step) => step !== "ls" && step !== "config" && !step.startsWith("image"),
+      ),
       ["pull", "migrate", "up"],
     );
     const [up] = ups(result.calls);
     assertStartsWithoutMigration(up);
-    assert.deepEqual(up.tags, { api: B, web: A, "mcp-admin": B });
+    assert.deepEqual(up.tags, { api: B, web: A, "mcp-admin": B, "ai-service": B });
     assert.ok(up.args.includes("--wait"));
     assert.ok(up.args.includes("--detach"));
     assert.ok(up.args.includes(path.join(dir, "production.env")), "the environment file");
@@ -441,7 +448,7 @@ describe("the state folder", () => {
     assert.equal(result.stderr.includes(dir), false, "the message names no path");
     assert.deepEqual(
       ups(result.calls).map(({ tags }) => tags),
-      [{ api: B, web: B, "mcp-admin": B }],
+      [{ api: B, web: B, "mcp-admin": B, "ai-service": B }],
       "the healthy release keeps running: the previous one is not started",
     );
     assert.equal(steps(result.calls).includes("image-rm"), false, "no image is removed");
@@ -469,7 +476,7 @@ describe("the state folder", () => {
     assert.equal(result.stderr.includes(dir), false, "the message names no path");
     assert.deepEqual(
       ups(result.calls).map(({ tags }) => tags),
-      [{ api: A, web: A, "mcp-admin": A }],
+      [{ api: A, web: A, "mcp-admin": A, "ai-service": A }],
       "the previous release keeps running",
     );
     assert.equal(steps(result.calls).includes("image-rm"), false, "no image is removed");
@@ -564,8 +571,8 @@ describe("rollback on failure", () => {
     assert.deepEqual(
       ups(result.calls).map(({ tags }) => tags),
       [
-        { api: C, web: B, "mcp-admin": B },
-        { api: B, web: B, "mcp-admin": B },
+        { api: C, web: B, "mcp-admin": B, "ai-service": C },
+        { api: B, web: B, "mcp-admin": B, "ai-service": B },
       ],
     );
     ups(result.calls).forEach(assertStartsWithoutMigration);
@@ -579,7 +586,7 @@ describe("rollback on failure", () => {
     assert.notEqual(result.status, 0);
     assert.deepEqual(
       ups(result.calls).map(({ tags }) => tags),
-      [{ api: A, web: A, "mcp-admin": A }],
+      [{ api: A, web: A, "mcp-admin": A, "ai-service": A }],
     );
     assert.deepEqual(releases(), [line(A)]);
   });
@@ -614,7 +621,7 @@ describe("the rollback command", () => {
       assert.equal(steps(result.calls).includes("migrate"), false);
       assert.deepEqual(
         ups(result.calls).map(({ tags }) => tags),
-        [{ api: B, web: B, "mcp-admin": B }],
+        [{ api: B, web: B, "mcp-admin": B, "ai-service": B }],
       );
       ups(result.calls).forEach(assertStartsWithoutMigration);
       assert.deepEqual(releases(), [line(A), line(B)]);
@@ -638,8 +645,8 @@ describe("the rollback command", () => {
     assert.deepEqual(
       ups(result.calls).map(({ tags }) => tags),
       [
-        { api: A, web: A, "mcp-admin": A },
-        { api: B, web: B, "mcp-admin": B },
+        { api: A, web: A, "mcp-admin": A, "ai-service": A },
+        { api: B, web: B, "mcp-admin": B, "ai-service": B },
       ],
     );
     assert.deepEqual(releases(), [line(A), line(B)]);
@@ -683,5 +690,125 @@ describe("image retention", () => {
     const result = deploy(deployInput(C));
     assert.notEqual(result.status, 0);
     assert.equal(steps(result.calls).includes("image-rm"), false);
+  });
+});
+
+// The AI service runs only when the production environment file switches the chat on (its profile
+// is active). Then it is named by `up`, so it has to become healthy and is rolled back with the
+// others; otherwise nothing of it is pulled or started.
+describe("the AI service", () => {
+  const withAi = { migrations: MIGRATIONS, aiService: true };
+  const names = (up) => up.args.slice(up.args.indexOf("--no-deps") + 1);
+
+  it("is not started while the environment file leaves the chat off", () => {
+    record(line(A));
+    scenario({ migrations: MIGRATIONS });
+    const result = deploy(deployInput(B));
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(names(ups(result.calls)[0]), LONG_RUNNING);
+  });
+
+  it("is started with the others and waited for when the chat is on", () => {
+    record(line(A));
+    scenario(withAi);
+    const result = deploy(deployInput(B));
+    assert.equal(result.status, 0, result.stderr);
+    const [up] = ups(result.calls);
+    assert.deepEqual(names(up), [...LONG_RUNNING, "ai-service"]);
+    assert.ok(up.args.includes("--wait"));
+    assert.equal(up.tags["ai-service"], B);
+    assert.deepEqual(releases(), [line(A), line(B)]);
+  });
+
+  it("rolls the whole release back when the AI service does not become healthy", () => {
+    // The failing AI service rehearsal: only its image (tag C) is unhealthy; the others are fine.
+    record(line(A), line(B));
+    scenario({ ...withAi, unhealthy: [C] });
+    const result = deploy(
+      `deploy release=${repo.commits.release} api=${B} web=${B} mcp-admin=${B} ai-service=${C}`,
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /previous release/);
+    const started = ups(result.calls);
+    assert.deepEqual(
+      started.map(({ tags }) => tags),
+      [
+        { api: B, web: B, "mcp-admin": B, "ai-service": C },
+        { api: B, web: B, "mcp-admin": B, "ai-service": B },
+      ],
+    );
+    started.forEach((up) => assert.ok(names(up).includes("ai-service")));
+    assert.deepEqual(releases(), [line(A), line(B)], "the failed release is not recorded");
+  });
+
+  it("is stopped, not started, when a release of the older record has no AI service", () => {
+    record(`api=${A} web=${A} mcp-admin=${A}`, line(B));
+    scenario(withAi);
+    const result = deploy("rollback");
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(names(ups(result.calls)[0]), LONG_RUNNING);
+    assert.ok(
+      result.calls.some(({ args }) => args.includes("stop") && args.includes("ai-service")),
+      "the AI service is stopped",
+    );
+    assert.deepEqual(releases(), [`api=${A} web=${A} mcp-admin=${A}`]);
+  });
+
+  it("accepts a record line written before the AI service was deployed", () => {
+    record(`api=${A} web=${A} mcp-admin=${A}`);
+    scenario({ migrations: MIGRATIONS });
+    const result = deploy(deployInput(B));
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(releases(), [`api=${A} web=${A} mcp-admin=${A}`, line(B)]);
+  });
+});
+
+// The forced command runs the script the server has checked out, which validates the input before
+// it brings the checkout to the release commit. The first release that carries this script is
+// therefore deployed by the previous one (fixtures/deploy-previous.sh, a copy of it): the
+// release job sends the input that script accepts, and the new script, checked out and run
+// again, accepts it too. Only later, when the owner sets DEPLOY_AI_SERVICE_INPUT, does the input
+// name the AI service.
+describe("the transition from the previous script", () => {
+  const previous = path.join(import.meta.dirname, "fixtures", "deploy-previous.sh");
+  const tags = { api: B, web: B, "mcp-admin": B, "ai-service": B };
+  const old = `api=${A} web=${A} mcp-admin=${A}`;
+
+  beforeEach(() => {
+    const sub = path.join(dir, "transition");
+    fs.mkdirSync(sub);
+    repo = createCheckout(sub, { oldScript: previous });
+  });
+
+  it("refuses the input that names the AI service, so the release job must not send it yet", () => {
+    record(old);
+    scenario({ migrations: MIGRATIONS });
+    const input = workflowInput(tags, repo.commits.release);
+    const result = deploy(input, { ssh: true });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /usage|unknown service/);
+    assert.equal(repo.head(), repo.commits.old, "the checkout never moves");
+  });
+
+  it("deploys through the previous script with the input the release job sends first", () => {
+    record(old);
+    scenario({ migrations: MIGRATIONS });
+    const input = workflowInput(tags, repo.commits.release, { aiService: false });
+    const result = deploy(input, { ssh: true });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(repo.head(), repo.commits.release, "the previous script checked it out");
+    assert.deepEqual(starts(), ["old", "release"], "then the new script ran");
+    assert.deepEqual(releases(), [old, `api=${B} web=${B} mcp-admin=${B}`]);
+  });
+
+  it("then accepts the input that names the AI service", () => {
+    record(old);
+    scenario({ migrations: MIGRATIONS });
+    const first = workflowInput(tags, repo.commits.release, { aiService: false });
+    assert.equal(deploy(first, { ssh: true }).status, 0);
+    const full = workflowInput({ ...tags, "ai-service": C }, repo.commits.release);
+    const result = deploy(full, { ssh: true });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(releases().at(-1), `api=${B} web=${B} mcp-admin=${B} ai-service=${C}`);
   });
 });

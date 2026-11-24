@@ -303,8 +303,9 @@ services:
   # no port: only the API calls its generation route. Every setting empty runs the fictional model
   # (`fake`), so the stack never calls a paid provider unless AI_SERVICE_MODEL=anthropic,
   # AI_SERVICE_ALLOW_PAID=true, a ceiling and the provider key are all given explicitly. The
-  # provider key is a secret: never put ANTHROPIC_API_KEY in a file Compose reads; start the stack
-  # through the secret wrapper. The fictional model's test files are not passed.
+  # provider key is a secret: in development never put ANTHROPIC_API_KEY in a file Compose reads;
+  # start the stack through the secret wrapper. Only the server's production environment file holds
+  # it, mode 600 (infra/README.md). The fictional model's test files are not passed.
   ai-service:
     profiles: [ai-service]
     build:
@@ -318,6 +319,9 @@ services:
       # The same tokens as the API's, so the pair always matches.
       AI_SERVICE_TOKEN: ${API_AI_SERVICE_TOKEN:-}
       AI_SERVICE_CONTROL_TOKEN: ${API_AI_CONTROL_TOKEN:-}
+      # The label of the environment, the API's: with `production` the service refuses the fictional
+      # model, so an empty provider setting can never look like a working chat.
+      AI_SERVICE_ENVIRONMENT: ${STORAGE_ENVIRONMENT:-}
       AI_SERVICE_MODEL: ${AI_SERVICE_MODEL:-}
       AI_SERVICE_FAKE_SCENARIO: ${AI_SERVICE_FAKE_SCENARIO:-}
       AI_SERVICE_ALLOW_PAID: ${AI_SERVICE_ALLOW_PAID:-}

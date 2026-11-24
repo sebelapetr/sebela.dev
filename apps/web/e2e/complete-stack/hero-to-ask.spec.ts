@@ -8,7 +8,7 @@ import { required } from "../stack";
 // in WEB_STACK_CHAT, and the test expects exactly that state:
 //
 // - `off`: no AI service and no relay token (the website stack smoke, and the production smoke
-//   without the AI service), as production runs until the chat goes live. The question is handed
+//   with every chat setting empty), as production runs until the chat goes live. The question is handed
 //   off, the Ask page says that the chat is off and keeps the question in its disabled composer,
 //   and nothing is asked of the chat.
 // - `on`: the AI service and the relay token, but no site key (the production smoke with the AI

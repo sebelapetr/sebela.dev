@@ -36,17 +36,19 @@ function git(cwd, args) {
 }
 
 /** The real deploy.sh with a line after the shebang that records `label` as one start. */
-function labelledScript(label) {
-  const [shebang, ...rest] = fs.readFileSync(REAL_SCRIPT, "utf8").split("\n");
+function labelledScript(label, scriptFile = REAL_SCRIPT) {
+  const [shebang, ...rest] = fs.readFileSync(scriptFile, "utf8").split("\n");
   const marker = `printf '%s\\n' ${label} >>"\${DEPLOY_TEST_STARTS:-/dev/null}"`;
   return [shebang, marker, ...rest].join("\n");
 }
 
-function writeCommit(work, label) {
+function writeCommit(work, label, scriptFile) {
   const scripts = path.join(work, "infra", "scripts");
   fs.mkdirSync(scripts, { recursive: true });
   fs.mkdirSync(path.join(work, "infra", "production"), { recursive: true });
-  fs.writeFileSync(path.join(scripts, "deploy.sh"), labelledScript(label), { mode: 0o755 });
+  fs.writeFileSync(path.join(scripts, "deploy.sh"), labelledScript(label, scriptFile), {
+    mode: 0o755,
+  });
   fs.writeFileSync(path.join(work, "compose.yaml"), `# ${label}\nservices: {}\n`);
   fs.writeFileSync(path.join(work, "infra", "production", "compose.yaml"), `# ${label}\n`);
   git(work, ["add", "--all"]);
@@ -58,13 +60,13 @@ function writeCommit(work, label) {
  * Creates the origin and the checkout in `dir`. Returns the checkout's folder, its deploy.sh, the
  * commits by label and `head()`, the commit the checkout is at.
  */
-export function createCheckout(dir) {
+export function createCheckout(dir, { oldScript } = {}) {
   const work = path.join(dir, "source");
   const origin = path.join(dir, "origin.git");
   const checkout = path.join(dir, "checkout");
   fs.mkdirSync(work);
   git(work, ["init", "--quiet", "--initial-branch=master"]);
-  const old = writeCommit(work, "old");
+  const old = writeCommit(work, "old", oldScript);
   const release = writeCommit(work, "release");
   git(work, ["switch", "--quiet", "--create", "side"]);
   const side = writeCommit(work, "side");

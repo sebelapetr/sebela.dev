@@ -18,5 +18,5 @@
       }
     }
   },
-  "services": ["api", "web", "mcp-admin"]
+  "services": ["api", "web", "mcp-admin", "ai-service"]
 }

@@ -40,11 +40,19 @@
             "reason": {
               "__typename": "DependencyChanged"
             }
+          },
+          {
+            "name": "@sebela/ai-service",
+            "path": "apps/ai-service",
+            "reason": {
+              "__typename": "DependencyChanged",
+              "dependency": "@sebela/api"
+            }
           }
         ],
-        "length": 5
+        "length": 6
       }
     }
   },
-  "services": ["api", "web", "mcp-admin"]
+  "services": ["api", "web", "mcp-admin", "ai-service"]
 }

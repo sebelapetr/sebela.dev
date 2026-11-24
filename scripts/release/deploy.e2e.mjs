@@ -23,7 +23,7 @@ const COMPOSE_FILE = path.join(import.meta.dirname, "fixtures", "deploy-e2e", "c
 const BASE_IMAGE = "busybox:1.37.0";
 // A registry name that never resolves: every image must already be local, nothing is pulled.
 const REGISTRY = "deploy-e2e.invalid/sebela";
-const SERVICES = ["api", "web", "mcp-admin"];
+const SERVICES = ["api", "web", "mcp-admin", "ai-service"];
 const PROJECT = `sebela-deploy-e2e-${process.pid}`;
 
 const sha = (character) => character.repeat(40);
@@ -31,6 +31,13 @@ const RELEASES = {
   first: { tag: sha("1"), migrations: ["0001_first.sql"], healthy: true },
   second: { tag: sha("2"), migrations: ["0001_first.sql"], healthy: true },
   unhealthy: { tag: sha("3"), migrations: ["0001_first.sql"], healthy: false },
+  // Only the AI service's image is unhealthy: the rehearsal of a failing AI service.
+  aiUnhealthy: {
+    tag: sha("5"),
+    migrations: ["0001_first.sql"],
+    healthy: true,
+    unhealthyServices: ["ai-service"],
+  },
   migrating: { tag: sha("4"), migrations: ["0001_first.sql", "0002_next.sql"], healthy: true },
 };
 const line = (tag) => SERVICES.map((service) => `${service}=${tag}`).join(" ");
@@ -63,6 +70,9 @@ const environment = {
   API_IMAGE_TAG: RELEASES.first.tag,
   WEB_IMAGE_TAG: RELEASES.first.tag,
   MCP_ADMIN_IMAGE_TAG: RELEASES.first.tag,
+  AI_SERVICE_IMAGE_TAG: RELEASES.first.tag,
+  // The environment file switches the chat on: the profile of the AI service is active.
+  COMPOSE_PROFILES: "ai-service",
 };
 delete environment.SSH_ORIGINAL_COMMAND;
 
@@ -84,23 +94,33 @@ function deploy(input, env = {}) {
   return result;
 }
 
-/** Commits a busybox container with the release's migrations and health as all three images. */
-function commitRelease({ tag, migrations, healthy }) {
-  const files = path.join(dir, `image-${tag}`);
-  const folder = path.join(files, "app", "packages", "db", "migrations");
-  fs.mkdirSync(folder, { recursive: true });
-  for (const name of migrations) fs.writeFileSync(path.join(folder, name), "-- fixture\n");
-  fs.writeFileSync(path.join(files, "healthy"), `#!/bin/sh\nexit ${healthy ? 0 : 1}\n`, {
-    mode: 0o755,
-  });
-  const container = docker(["create", BASE_IMAGE]);
-  try {
-    docker(["cp", `${files}/.`, `${container}:/`]);
-    const [first, ...others] = SERVICES.map((service) => `${REGISTRY}/sebela-${service}:${tag}`);
-    docker(["commit", "--change", 'CMD ["sleep", "3600"]', container, first]);
-    for (const other of others) docker(["tag", first, other]);
-  } finally {
-    docker(["rm", "--force", container], { check: false });
+/**
+ * Commits a busybox container with the release's migrations and health as all four images; the
+ * images of `unhealthyServices` fail their health check.
+ */
+function commitRelease({ tag, migrations, healthy, unhealthyServices = [] }) {
+  for (const service of SERVICES) {
+    const sick = !healthy || unhealthyServices.includes(service);
+    const files = path.join(dir, `image-${tag}-${service}`);
+    const folder = path.join(files, "app", "packages", "db", "migrations");
+    fs.mkdirSync(folder, { recursive: true });
+    for (const name of migrations) fs.writeFileSync(path.join(folder, name), "-- fixture\n");
+    fs.writeFileSync(path.join(files, "healthy"), `#!/bin/sh\nexit ${sick ? 1 : 0}\n`, {
+      mode: 0o755,
+    });
+    const container = docker(["create", BASE_IMAGE]);
+    try {
+      docker(["cp", `${files}/.`, `${container}:/`]);
+      docker([
+        "commit",
+        "--change",
+        'CMD ["sleep", "3600"]',
+        container,
+        `${REGISTRY}/sebela-${service}:${tag}`,
+      ]);
+    } finally {
+      docker(["rm", "--force", container], { check: false });
+    }
   }
 }
 
@@ -135,7 +155,7 @@ let failed = false;
 try {
   if (!hadBaseImage) docker(["pull", BASE_IMAGE]);
   // Each release's images appear just before its deployment, as a pull would bring them: a
-  // healthy deployment prunes every image of the three services outside the last two releases.
+  // healthy deployment prunes every image of the four services outside the last two releases.
 
   // The first release: no current release, so it backs up first, then runs healthy.
   commitRelease(RELEASES.first);
@@ -165,6 +185,15 @@ try {
   assert.deepEqual(recorded(), [line(RELEASES.first.tag), line(RELEASES.second.tag)]);
   assert.equal(migrations(), 3, "the unhealthy release migrated once; its fallback did not");
 
+  // A release whose AI service alone is unhealthy is rolled back with the others: the second
+  // release runs again, AI service included.
+  commitRelease(RELEASES.aiUnhealthy);
+  result = deploy(deployInput(RELEASES.aiUnhealthy.tag));
+  assert.notEqual(result.status, 0, "a release with a failing AI service fails");
+  assert.match(result.stderr, /previous release is running again/);
+  assert.deepEqual(running(), all(RELEASES.second.tag));
+  assert.deepEqual(recorded(), [line(RELEASES.first.tag), line(RELEASES.second.tag)]);
+
   // A new migration without a backup script is refused before anything changes.
   commitRelease(RELEASES.migrating);
   result = deploy(deployInput(RELEASES.migrating.tag), {
@@ -179,7 +208,7 @@ try {
   assert.equal(result.status, 0, "the rollback succeeds");
   assert.deepEqual(running(), all(RELEASES.first.tag));
   assert.deepEqual(recorded(), [line(RELEASES.first.tag)]);
-  assert.equal(migrations(), 3, "neither the refused release nor the rollback migrated");
+  assert.equal(migrations(), 4, "neither the refused release nor the rollback migrated");
   for (const service of SERVICES) {
     const image = `${REGISTRY}/sebela-${service}:${RELEASES.first.tag}`;
     assert.ok(exists(image), `${image} is kept`);

@@ -59,7 +59,7 @@ describe("affected services", () => {
   }
 
   it("lists the services in a fixed order", () => {
-    assert.deepEqual(SERVICES, ["api", "web", "mcp-admin"]);
+    assert.deepEqual(SERVICES, ["api", "web", "mcp-admin", "ai-service"]);
     assert.deepEqual(
       affectedServices({ packages: ["@sebela/mcp-admin", "@sebela/api"], changedFiles: [] }),
       ["api", "mcp-admin"],
@@ -100,14 +100,14 @@ describe("release plan", () => {
     assert.deepEqual(
       releasePlan({
         sha: C,
-        current: { api: B, web: B, "mcp-admin": B },
+        current: { api: B, web: B, "mcp-admin": B, "ai-service": B },
         isAncestor: git.isAncestor,
         affectedSince: git.affectedSince,
       }),
       {
         build: ["web"],
-        reuse: ["api", "mcp-admin"],
-        tags: { api: B, web: C, "mcp-admin": B },
+        reuse: ["api", "mcp-admin", "ai-service"],
+        tags: { api: B, web: C, "mcp-admin": B, "ai-service": B },
       },
     );
   });
@@ -119,14 +119,14 @@ describe("release plan", () => {
     assert.deepEqual(
       releasePlan({
         sha: C,
-        current: { api: A, web: A, "mcp-admin": A },
+        current: { api: A, web: A, "mcp-admin": A, "ai-service": A },
         isAncestor: git.isAncestor,
         affectedSince: git.affectedSince,
       }),
       {
         build: ["api"],
-        reuse: ["web", "mcp-admin"],
-        tags: { api: C, web: A, "mcp-admin": A },
+        reuse: ["web", "mcp-admin", "ai-service"],
+        tags: { api: C, web: A, "mcp-admin": A, "ai-service": A },
       },
     );
   });
@@ -135,7 +135,7 @@ describe("release plan", () => {
     const git = history({ ancestors: [A, B, C], changes: { [A]: [], [B]: [] } });
     releasePlan({
       sha: C,
-      current: { api: A, web: B, "mcp-admin": A },
+      current: { api: A, web: B, "mcp-admin": A, "ai-service": A },
       isAncestor: git.isAncestor,
       affectedSince: git.affectedSince,
     });
@@ -147,14 +147,14 @@ describe("release plan", () => {
     assert.deepEqual(
       releasePlan({
         sha: C,
-        current: { api: C, web: C, "mcp-admin": C },
+        current: { api: C, web: C, "mcp-admin": C, "ai-service": C },
         isAncestor: git.isAncestor,
         affectedSince: git.affectedSince,
       }),
       {
         build: [],
         reuse: SERVICES,
-        tags: { api: C, web: C, "mcp-admin": C },
+        tags: { api: C, web: C, "mcp-admin": C, "ai-service": C },
       },
     );
   });
@@ -164,11 +164,15 @@ describe("release plan", () => {
     assert.deepEqual(
       releasePlan({
         sha: C,
-        current: { api: null, web: "latest", "mcp-admin": A },
+        current: { api: null, web: "latest", "mcp-admin": A, "ai-service": null },
         isAncestor: git.isAncestor,
         affectedSince: git.affectedSince,
       }),
-      { build: ["api", "web"], reuse: ["mcp-admin"], tags: { api: C, web: C, "mcp-admin": A } },
+      {
+        build: ["api", "web", "ai-service"],
+        reuse: ["mcp-admin"],
+        tags: { api: C, web: C, "mcp-admin": A, "ai-service": C },
+      },
     );
     assert.deepEqual(
       releasePlan({
@@ -226,7 +230,7 @@ describe("no release loop", () => {
     const git = history({ ancestors: [A, B, C], changes: { [B]: services } });
     const plan = releasePlan({
       sha: C,
-      current: { api: B, web: B, "mcp-admin": B },
+      current: { api: B, web: B, "mcp-admin": B, "ai-service": B },
       isAncestor: git.isAncestor,
       affectedSince: git.affectedSince,
     });
