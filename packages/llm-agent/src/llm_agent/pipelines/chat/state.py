@@ -59,6 +59,15 @@ class Verdict(BaseModel):
             return value
         return REPLACED_REASON_CODE
 
+    @property
+    def blocks(self) -> bool:
+        """Whether the turn ends at Security with a fixed refusal: every `BLOCK`, and an
+        `UNCERTAIN` verdict in the `abuse` category (#455). Abuse has no partial answer: a message
+        that mixes abusive or hateful text with a profile question is refused as a whole, so that
+        text never reaches Main, a tool or an answer. Other `UNCERTAIN` verdicts run the
+        restricted Main stage."""
+        return self.verdict == "BLOCK" or (self.verdict == "UNCERTAIN" and self.category == "abuse")
+
 
 @dataclass
 class Execution:

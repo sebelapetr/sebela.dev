@@ -1,19 +1,18 @@
 """Output Guard: the only producer of a `ChatResult`. No model is called here.
 
-A stopped execution, a block and a declined request get fixed EN/CS responses. A draft is reviewed
-deterministically: it passes, is repaired by dropping sources that are not this turn's evidence
-(from its refs and as source-ref tokens from its text, in any written form), or is replaced as a
-whole by the fixed insufficient-evidence response. Whenever the visitor should ask directly, the
-contact card is built from a trusted `get_contact` read, never from model text; if that read
-fails the result is `unavailable`, so a draft is never shown without its required card.
-The card is required for every honest unknown: an `insufficient_evidence` outcome, a replaced draft
-and a draft whose `unpublished` flag says the fact the visitor asked for is not published, even
-when the model chose `answered`; the card never depends on the outcome choice alone. It still
-depends on the model setting that flag: this guard enforces the card from the flag, it cannot
-detect an unflagged unknown in free text.
-An answered draft carries the typed blocks of the experiences, services and explorations it cites,
-built from their evidence records; no other result carries blocks.
-"""
+A stopped execution, a blocking verdict (`Verdict.blocks`) and a declined request get fixed EN/CS
+responses. A draft is reviewed deterministically: it passes, is repaired by dropping sources that
+are not this turn's evidence (from its refs and as source-ref tokens from its text, in any written
+form), or is replaced as a whole by the fixed insufficient-evidence response. Whenever the visitor
+should ask directly, the contact card is built from a trusted `get_contact` read, never from model
+text; if that read fails the result is `unavailable`, so a draft is never shown without its
+required card. The card is required for every honest unknown: an `insufficient_evidence` outcome, a
+replaced draft and a draft whose `unpublished` flag says the fact the visitor asked for is not
+published, even when the model chose `answered`; the card never depends on the outcome choice
+alone. It still depends on the model setting that flag: this guard enforces the card from the flag,
+it cannot detect an unflagged unknown in free text. An answered draft carries the typed blocks of
+the experiences, services and explorations it cites, built from their evidence records; no other
+result carries blocks."""
 
 from __future__ import annotations
 
@@ -36,7 +35,7 @@ async def finalize(execution: Execution, state: ChatState) -> ChatResult:
     unpublished: bool | None = None
     if stopped is not None:
         result = stopped_result(execution, stopped)
-    elif verdict is not None and verdict.verdict == "BLOCK":
+    elif verdict is not None and verdict.blocks:
         kind: FixedText = (
             "manipulation" if verdict.category in MANIPULATION_CATEGORIES else "out_of_scope"
         )
