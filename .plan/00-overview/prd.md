@@ -384,7 +384,7 @@ Deferred to the phase named in brackets.
 4. Whether Bunny's S3 compatibility must be chosen when a storage zone is created. [02]
 5. How a usage limit is recognised from an unattended run. [harness]
 6. Measured retrieval settings and extraction limits; the initial embeddings model is Voyage AI `voyage-4`, replaceable if it misses frozen thresholds. [09]
-7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Phase-7 PRD and its seven-issue breakdown are owner-approved (Langfuse Cloud EU and Turnstile Managed); implementation still needs local PII model/resource measurements and final owner acceptance. See `.plan/07-ai-service/issues.md`. Graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
+7. Phase-6 initial model candidates/effort, Python tooling and eval floors are owner-agreed in its PRD; implementation pins compatible versions and validates the candidates. Phase-7 PRD and its seven-issue breakdown are owner-approved (Langfuse Cloud EU and Turnstile Managed); implementation still needs local PII model/resource measurements and final owner acceptance. See `.plan/done/07-ai-service/issues.md`. Graph extraction/storage details [11], Auto Ontology suitability [12] and verified MCP Apps/client support [13] remain phase-owned decisions.
 8. Resolved for phase 10: the existing server, the production domain sebela.dev (sebelapetr.cz stays as it is), the server's existing nginx as reverse proxy. Still for the owner before launch: the monthly model budget and the legal side of storing conversations. [10, 9.1]
 
 ## Further Notes

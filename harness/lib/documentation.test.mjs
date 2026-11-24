@@ -35,7 +35,7 @@ test("is everything in docs/ and .plan/, whatever a folder inside them is called
     "docs/src/overview.md",
     "docs/fixtures/example.png",
     ".plan/done/06-llm-agent/evals/notes.md",
-    ".plan/07-ai-service/fixtures/sample.json",
+    ".plan/done/07-ai-service/fixtures/sample.json",
   ]) {
     assert.equal(isDocumentation(file), true, file);
   }

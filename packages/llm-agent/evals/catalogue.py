@@ -1,7 +1,7 @@
 """The model eval catalogue: the approved phase-6 cases plus the phase-7 compaction cases.
 
 Phase 6 (`.plan/done/06-llm-agent/evals.md`): 80 end-to-end cases, 40 families. Phase 7
-(`.plan/07-ai-service/evals.md`) adds the compaction families C03-C06 (#213), the trace export
+(`.plan/done/07-ai-service/evals.md`) adds the compaction families C03-C06 (#213), the trace export
 family C07 (#214), the abuse families C09-C11 (#393) and the mixed request family C12 (#394);
 its deterministic families (C01, C02 and C08) are ordinary tests, not model cases. Each family
 has an independently written English (`-en`) and Czech (`-cs`) case. A case is `implemented` once
