@@ -1,0 +1,566 @@
+/**
+ * The visitor conversation the API serves (phase 7) and the internal control bodies of one
+ * generation.
+ *
+ * - A visitor never names a visitor or conversation: the API resolves the caller's single
+ *   conversation from its first-party cookie. A submission carries only the request identifier,
+ *   the trimmed question and the bot-challenge token.
+ * - An operation is one admitted question with its absolute deadline. Its status moves
+ *   `accepted` → `running` → `completed` / `failed`, or to `interrupted` when no result arrived by
+ *   the deadline. The assistant message it fills is `pending` until then.
+ * - Progress carries a stage and the elapsed time only — never draft text, tool text or
+ *   reasoning — and never extends the deadline.
+ * - The AI service claims a one-use grant for an operation and reports one result in the stream
+ *   contract's block, source and link shapes; anything outside them is refused, so nothing
+ *   unapproved is stored or streamed.
+ * - `chatTerminalForGeneration` maps a generation outcome to the public terminal, and
+ *   `chatReplayEvents` turns a stored assistant message into the same stream events every time,
+ *   so a reconnect replays identical event identifiers.
+ */
+import { z } from "zod";
+
+import {
+  ChatBlockSchema,
+  ChatRelatedLinkSchema,
+  ChatSourceSchema,
+  chatErrorCodes,
+  chatOutcomes,
+  chatQuestionMaxLength,
+  type ChatStreamEvent,
+  type ChatTerminal,
+} from "./stream.js";
+
+/** The most messages one page of a conversation holds. */
+export const chatConversationPageLimit = 20;
+
+/** The most completed answered exchanges the API sends the AI service as context. */
+export const chatHistoryExchangeLimit = 6;
+
+/** The longest bot-challenge token a submission may carry. */
+export const chatChallengeTokenMaxLength = 2048;
+
+/** The longest opaque generation grant. */
+export const chatGrantMaxLength = 200;
+
+/** The longest stored answer text, in characters. */
+export const chatAnswerMaxLength = 32000;
+
+/** How long a conversation is kept after its last activity unless configured otherwise. */
+export const chatRetentionDaysDefault = 730;
+
+/** The longest text of one replayed `text_delta` event (the stream contract's limit). */
+const deltaLength = 4000;
+
+/** The most typed blocks one answer carries. */
+const blockLimit = 3;
+
+export const chatOperationStatuses = [
+  "accepted",
+  "running",
+  "completed",
+  "failed",
+  "interrupted",
+  /** Stopped by the visitor, or by clearing the conversation. */
+  "cancelled",
+] as const;
+
+export type ChatOperationStatus = (typeof chatOperationStatuses)[number];
+
+export const chatAssistantStatuses = [
+  "pending",
+  "completed",
+  "failed",
+  "interrupted",
+  "cancelled",
+] as const;
+
+export type ChatAssistantStatus = (typeof chatAssistantStatuses)[number];
+
+export const chatProgressStages = ["queued", "checking", "answering", "finishing"] as const;
+
+export type ChatProgressStage = (typeof chatProgressStages)[number];
+
+/** How the agent library ended a generation; mapped to a public terminal by the API. */
+export const chatGenerationOutcomes = [
+  "answered",
+  "insufficient_evidence",
+  "refused",
+  "unavailable",
+  "cancelled",
+  "limit_reached",
+] as const;
+
+export type ChatGenerationOutcome = (typeof chatGenerationOutcomes)[number];
+
+/**
+ * What an operation does: answer one question, or compact the conversation's working context into
+ * a summary. A compaction is not a visitor message: it has no question and no answer message.
+ */
+export const chatOperationKinds = ["answer", "compaction"] as const;
+
+export type ChatOperationKind = (typeof chatOperationKinds)[number];
+
+/**
+ * How a compaction ended: `compacted` installed a new summary; `unchanged` and `failed` installed
+ * nothing and kept the prior working context.
+ */
+export const chatCompactionOutcomes = ["compacted", "unchanged", "failed"] as const;
+
+export type ChatCompactionOutcome = (typeof chatCompactionOutcomes)[number];
+
+/** The longest line of a working-context summary, in characters. */
+export const chatSummaryLineMaxLength = 300;
+
+/** The hard cap of a summary's visible tokens. */
+export const chatSummaryTokenCap = 1500;
+
+/**
+ * The record kinds a summary reference may point at: the agent library's own source kinds, since
+ * only the AI service and the agent read a summary back.
+ */
+export const chatSummaryReferenceKinds = [
+  "profile",
+  "contact",
+  "experience",
+  "project",
+  "exploration",
+  "service",
+  "education",
+  "current_focus",
+  "roadmap",
+  "roadmap_area",
+  "roadmap_module",
+  "diary_day",
+  "statistics",
+  "book",
+  "event",
+] as const;
+
+const Instant = z.iso.datetime({ offset: true });
+
+/** One question as the visitor submits it; the conversation comes from the cookie. */
+export const ChatMessageSubmissionSchema = z
+  .strictObject({
+    requestId: z.uuid().meta({
+      description:
+        "This question's request, generated by the client; a retry reuses it and recovers it.",
+    }),
+    question: z.string().trim().min(1).max(chatQuestionMaxLength),
+    challengeToken: z.string().min(1).max(chatChallengeTokenMaxLength).meta({
+      description: "The bot-challenge token of this submission; redeemed once, never stored.",
+    }),
+  })
+  .meta({ id: "ChatMessageSubmission" });
+
+export type ChatMessageSubmission = z.infer<typeof ChatMessageSubmissionSchema>;
+
+/**
+ * An explicit retry of a failed attempt: the question stays the stored one, so only the retry's own
+ * idempotency key and a fresh bot-challenge token are sent.
+ */
+export const ChatRetrySubmissionSchema = z
+  .strictObject({
+    retryId: z.uuid().meta({
+      description:
+        "This retry's own idempotency key, generated by the client; repeating it recovers the retry.",
+    }),
+    challengeToken: z.string().min(1).max(chatChallengeTokenMaxLength).meta({
+      description: "The bot-challenge token of this retry; redeemed once, never stored.",
+    }),
+  })
+  .meta({ id: "ChatRetrySubmission" });
+
+export type ChatRetrySubmission = z.infer<typeof ChatRetrySubmissionSchema>;
+
+/**
+ * The confirmation of a clear: the id of the conversation the visitor sees. The cookie decides whose
+ * conversation it is; an id that is not the caller's current one clears nothing.
+ */
+export const ChatConversationClearSchema = z
+  .strictObject({
+    conversationId: z.uuid().meta({
+      description: "The conversation the visitor confirmed clearing; must be the current one.",
+    }),
+  })
+  .meta({ id: "ChatConversationClear" });
+
+export type ChatConversationClear = z.infer<typeof ChatConversationClearSchema>;
+
+/** The page of a conversation to read: the newest messages, or those before a message. */
+export const ChatConversationQuerySchema = z.strictObject({
+  before: z.uuid().optional().meta({
+    description: "Read the messages before this message of the caller's conversation.",
+  }),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(chatConversationPageLimit)
+    .default(chatConversationPageLimit),
+});
+
+export type ChatConversationQuery = z.infer<typeof ChatConversationQuerySchema>;
+
+/** How a reported compaction ended; `null` on the operation until a result is stored. */
+export const ChatOperationCompactionSchema = z
+  .object({
+    outcome: z.enum(chatCompactionOutcomes),
+    reason: z.string().min(1).max(64).nullable(),
+  })
+  .meta({ id: "ChatOperationCompaction" });
+
+/**
+ * One admitted question or compaction and its progress; carries no credential or visitor
+ * identifier. An answer fills its assistant message; a compaction has none and reports its outcome.
+ */
+export const ChatOperationSchema = z
+  .object({
+    operationId: z.uuid(),
+    requestId: z.uuid(),
+    kind: z.enum(chatOperationKinds),
+    status: z.enum(chatOperationStatuses),
+    deadlineAt: Instant.meta({ description: "The absolute deadline; it is never extended." }),
+    assistantMessageId: z.uuid().nullable().meta({
+      description: "The answer this operation fills; `null` for a compaction.",
+    }),
+    compaction: ChatOperationCompactionSchema.nullable().meta({
+      description:
+        "A compaction's reported outcome; `null` for an answer and before a compaction reports.",
+    }),
+  })
+  .refine(
+    (operation) =>
+      operation.kind === "answer"
+        ? operation.assistantMessageId !== null && operation.compaction === null
+        : operation.assistantMessageId === null,
+    { message: "An answer has its message and no compaction; a compaction has no message." },
+  )
+  .meta({ id: "ChatOperation" });
+
+export type ChatOperation = z.infer<typeof ChatOperationSchema>;
+
+export const ChatUserMessageSchema = z
+  .object({
+    id: z.uuid(),
+    role: z.literal("user"),
+    requestId: z.uuid(),
+    text: z.string().min(1).max(chatQuestionMaxLength),
+    createdAt: Instant,
+  })
+  .meta({ id: "ChatUserMessage" });
+
+export type ChatUserMessage = z.infer<typeof ChatUserMessageSchema>;
+
+export const ChatAssistantMessageSchema = z
+  .object({
+    id: z.uuid(),
+    role: z.literal("assistant"),
+    requestId: z.uuid(),
+    status: z.enum(chatAssistantStatuses),
+    outcome: z.enum(chatOutcomes).nullable(),
+    error: z.object({ code: z.enum(chatErrorCodes), retryable: z.boolean() }).nullable(),
+    text: z.string().max(chatAnswerMaxLength).nullable(),
+    blocks: z.array(ChatBlockSchema).max(blockLimit),
+    sources: z.array(ChatSourceSchema).max(8),
+    related: z.array(ChatRelatedLinkSchema).max(2),
+    model: z.string().min(1).max(100).nullable().meta({
+      description:
+        "The main model this answer was admitted for; kept after a configuration change. `null` when none was recorded.",
+    }),
+    effort: z.string().min(1).max(100).nullable().meta({
+      description:
+        "The reasoning effort this answer was admitted for; `null` when none was recorded.",
+    }),
+    createdAt: Instant,
+  })
+  .meta({ id: "ChatAssistantMessage" });
+
+export type ChatAssistantMessage = z.infer<typeof ChatAssistantMessageSchema>;
+
+export const ChatMessageSchema = z
+  .discriminatedUnion("role", [ChatUserMessageSchema, ChatAssistantMessageSchema])
+  .meta({ id: "ChatMessage" });
+
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+/** The caller's single conversation: one page of messages, oldest first, and its state. */
+export const ChatConversationSchema = z
+  .object({
+    conversationId: z.uuid(),
+    messages: z.array(ChatMessageSchema).max(chatConversationPageLimit),
+    nextCursor: z.uuid().nullable().meta({
+      description: "Pass as `before` to read older messages; `null` when there are none.",
+    }),
+    activeOperation: ChatOperationSchema.nullable(),
+    retentionDays: z.int().positive().meta({
+      description: "The conversation is deleted this many days after its last activity.",
+    }),
+  })
+  .meta({ id: "ChatConversation" });
+
+export type ChatConversation = z.infer<typeof ChatConversationSchema>;
+
+/** A sign of life while an answer is prepared; never text, never a deadline extension. */
+export const ChatProgressSchema = z
+  .strictObject({
+    type: z.literal("progress"),
+    requestId: z.uuid(),
+    stage: z.enum(chatProgressStages),
+    elapsedMs: z.int().nonnegative(),
+  })
+  .meta({ id: "ChatProgress" });
+
+export type ChatProgress = z.infer<typeof ChatProgressSchema>;
+
+const GrantSchema = z.string().min(1).max(chatGrantMaxLength);
+
+/** The AI service's one-use claim of an operation's generation grant. */
+export const ChatGrantClaimSchema = z
+  .strictObject({ operationId: z.uuid(), grant: GrantSchema })
+  .meta({ id: "ChatGrantClaim" });
+
+export type ChatGrantClaim = z.infer<typeof ChatGrantClaimSchema>;
+
+/** What a successful claim binds the generation or compaction to. */
+export const ChatGrantClaimedSchema = z
+  .object({
+    claimed: z.literal(true),
+    kind: z.enum(chatOperationKinds).meta({
+      description: "Whether the grant is for an answer or a compaction; the other is refused.",
+    }),
+    deadlineAt: Instant,
+    allowanceUsd: z.number().positive(),
+    model: z.string().min(1).max(100),
+    effort: z.string().min(1).max(100).nullable().meta({
+      description:
+        "The reasoning effort bound at admission; `null` for an operation admitted without one.",
+    }),
+    pricingVersion: z.string().min(1).max(100),
+    contextRevision: z.int().nonnegative(),
+  })
+  .meta({ id: "ChatGrantClaimed" });
+
+export type ChatGrantClaimed = z.infer<typeof ChatGrantClaimedSchema>;
+
+/** The one result of a generation, approved by the Output Guard, in the contract's shapes. */
+export const ChatGenerationResultSchema = z
+  .strictObject({
+    grant: GrantSchema,
+    outcome: z.enum(chatGenerationOutcomes),
+    reason: z.string().min(1).max(64).nullable(),
+    language: z.enum(["en", "cs"]),
+    text: z.string().max(chatAnswerMaxLength),
+    blocks: z.array(ChatBlockSchema).max(blockLimit),
+    sources: z.array(ChatSourceSchema).max(8),
+    related: z.array(ChatRelatedLinkSchema).max(2),
+    usage: z.strictObject({
+      costUsd: z.number().nonnegative(),
+      costUncertain: z.boolean(),
+      inputTokens: z.int().nonnegative(),
+      outputTokens: z.int().nonnegative(),
+      modelAttempts: z.int().nonnegative(),
+    }),
+    versions: z.record(z.string().min(1).max(64), z.string().max(200)),
+    latencyMs: z.int().nonnegative(),
+    context: z
+      .strictObject({
+        estimatedInputTokens: z.int().nonnegative(),
+        reportedInputTokens: z.int().nonnegative().nullable(),
+        capTokens: z.int().positive(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .refine((result) => Object.keys(result.versions).length <= 20, {
+    path: ["versions"],
+    message: "At most 20 versions.",
+  })
+  .meta({ id: "ChatGenerationResult" });
+
+export type ChatGenerationResult = z.infer<typeof ChatGenerationResultSchema>;
+
+/** A visitor's request to compact the working context; it carries no text and is no message. */
+export const ChatCompactionSubmissionSchema = z
+  .strictObject({
+    requestId: z.uuid().meta({
+      description:
+        "This compaction's request, generated by the client; repeating it recovers the compaction.",
+    }),
+    challengeToken: z.string().min(1).max(chatChallengeTokenMaxLength).meta({
+      description: "The bot-challenge token of this compaction; redeemed once, never stored.",
+    }),
+  })
+  .meta({ id: "ChatCompactionSubmission" });
+
+export type ChatCompactionSubmission = z.infer<typeof ChatCompactionSubmissionSchema>;
+
+export const ChatCompactionStartedSchema = z
+  .strictObject({ status: z.literal("started"), operation: ChatOperationSchema })
+  .meta({ id: "ChatCompactionStarted" });
+
+export const ChatCompactionNoopSchema = z
+  .strictObject({
+    status: z.literal("noop"),
+    reason: z.literal("nothing_to_compact").meta({
+      description: "The working context is already small; nothing was billed or counted.",
+    }),
+  })
+  .meta({ id: "ChatCompactionNoop" });
+
+/** The answer to a compaction: its operation, or a local no-op that bills and counts nothing. */
+export const ChatCompactionResponseSchema = z
+  .discriminatedUnion("status", [ChatCompactionStartedSchema, ChatCompactionNoopSchema])
+  .meta({ id: "ChatCompactionResponse" });
+
+export type ChatCompactionResponse = z.infer<typeof ChatCompactionResponseSchema>;
+
+const SummaryLines = (limit: number) =>
+  z.array(z.string().min(1).max(chatSummaryLineMaxLength)).max(limit).default([]);
+
+/** A record an earlier answer cited: a pointer, never evidence. */
+export const ChatSummaryReferenceSchema = z
+  .strictObject({
+    kind: z.enum(chatSummaryReferenceKinds),
+    recordId: z.string().min(1).max(128),
+    title: z.string().max(200).default(""),
+  })
+  .meta({ id: "ChatSummaryReference" });
+
+/**
+ * The validated summary of a conversation's working context. Private conversation state: it is
+ * stored by the API and sent back to the AI service, never to a visitor, and stays untrusted
+ * history, never policy or authorization.
+ */
+export const ChatContextSummarySchema = z
+  .strictObject({
+    language: z.enum(["en", "cs"]),
+    goals: SummaryLines(5),
+    openQuestions: SummaryLines(5),
+    covered: SummaryLines(8),
+    visitorClaims: SummaryLines(5),
+    references: z.array(ChatSummaryReferenceSchema).max(12).default([]),
+  })
+  .meta({ id: "ChatContextSummary" });
+
+export type ChatContextSummary = z.infer<typeof ChatContextSummarySchema>;
+
+/**
+ * The one result of a compaction. Only `compacted` carries a summary, `kept` (how many of the
+ * dispatched exchanges, newest first, stay verbatim after it) and the next request's history
+ * estimate; `unchanged` and `failed` install nothing and name a reason.
+ */
+export const ChatCompactionResultSchema = z
+  .strictObject({
+    grant: GrantSchema,
+    outcome: z.enum(chatCompactionOutcomes),
+    reason: z.string().min(1).max(64).nullable(),
+    summary: ChatContextSummarySchema.nullable(),
+    kept: z.int().min(0).max(chatHistoryExchangeLimit),
+    summaryTokens: z.int().min(0).max(chatSummaryTokenCap),
+    nextInputTokens: z.int().nonnegative().nullable().meta({
+      description:
+        "The estimate of the working context the next question carries (summary and kept exchanges only); `null` when not measured.",
+    }),
+    usage: z.strictObject({
+      costUsd: z.number().nonnegative(),
+      costUncertain: z.boolean(),
+      inputTokens: z.int().nonnegative(),
+      outputTokens: z.int().nonnegative(),
+      modelAttempts: z.int().nonnegative(),
+    }),
+    versions: z.record(z.string().min(1).max(64), z.string().max(200)),
+    latencyMs: z.int().nonnegative(),
+  })
+  .refine((result) => Object.keys(result.versions).length <= 20, {
+    path: ["versions"],
+    message: "At most 20 versions.",
+  })
+  .refine(
+    (result) =>
+      result.outcome === "compacted"
+        ? result.summary !== null && result.reason === null && result.nextInputTokens !== null
+        : result.summary === null && result.summaryTokens === 0 && result.reason !== null,
+    { message: "Only a compacted result carries a summary; any other names a reason." },
+  )
+  .meta({ id: "ChatCompactionResult" });
+
+export type ChatCompactionResult = z.infer<typeof ChatCompactionResultSchema>;
+
+/**
+ * The public terminal of a generation outcome: an answer, a lack of evidence, a refusal and an
+ * unavailable assistant complete with the same outcome (a refusal is an answer); the deadline is
+ * a retryable timeout; another limit completes as unavailable; a cancelled generation is
+ * unavailable infrastructure. Pure.
+ */
+export function chatTerminalForGeneration(
+  outcome: ChatGenerationOutcome,
+  reason: string | null,
+): ChatTerminal {
+  switch (outcome) {
+    case "limit_reached":
+      return reason === "deadline"
+        ? { type: "error", code: "timeout", retryable: true }
+        : { type: "complete", outcome: "unavailable" };
+    case "cancelled":
+      return { type: "error", code: "unavailable", retryable: true };
+    default:
+      return { type: "complete", outcome };
+  }
+}
+
+/**
+ * The stream events of a stored assistant message, identical on every call: `start` (0), the text
+ * in deltas, each block, the sources, the related links and the terminal. A pending answer only
+ * starts; a failed or interrupted one ends with its error and shows nothing else. Pure.
+ */
+export function chatReplayEvents(
+  requestId: string,
+  message: ChatAssistantMessage,
+): ChatStreamEvent[] {
+  const ids = { requestId, messageId: message.id };
+  const events: ChatStreamEvent[] = [{ ...ids, eventId: 0, type: "start" }];
+  const next = () => events.length;
+  if (message.status === "pending") return events;
+  if (message.status === "completed" && message.outcome !== null) {
+    const text = message.text ?? "";
+    for (let at = 0; at < text.length; at += deltaLength) {
+      events.push({
+        ...ids,
+        eventId: next(),
+        type: "text_delta",
+        text: text.slice(at, at + deltaLength),
+      });
+    }
+    for (const block of message.blocks)
+      events.push({ ...ids, eventId: next(), type: "block", block });
+    if (message.sources.length > 0) {
+      events.push({ ...ids, eventId: next(), type: "sources", sources: message.sources });
+    }
+    if (message.related.length > 0) {
+      events.push({ ...ids, eventId: next(), type: "related", links: message.related });
+    }
+    events.push({ ...ids, eventId: next(), type: "complete", outcome: message.outcome });
+    return events;
+  }
+  const error = message.error ?? { code: "internal", retryable: false };
+  events.push({ ...ids, eventId: next(), type: "error", ...error });
+  return events;
+}
+
+/** Whether trace exports of a cleared conversation still wait for their remote deletion. */
+export const chatTelemetryDeletionStates = ["none", "pending"] as const;
+
+/**
+ * The answer to a clear: the conversation the visitor now has (a fresh empty one, or the unchanged
+ * one when nothing was cleared) and whether a remote telemetry deletion is still pending. A pending
+ * deletion is never reported as done.
+ */
+export const ChatConversationClearedSchema = z
+  .strictObject({
+    cleared: z.boolean(),
+    conversation: ChatConversationSchema,
+    telemetryDeletion: z.enum(chatTelemetryDeletionStates),
+  })
+  .meta({ id: "ChatConversationCleared" });
+
+export type ChatConversationCleared = z.infer<typeof ChatConversationClearedSchema>;

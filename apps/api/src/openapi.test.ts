@@ -13,6 +13,22 @@ import { demoSeedFolder } from "@sebela/services";
 
 import { connection, openTestBackend, type TestBackend } from "./test-support.js";
 
+/** The internal chat control routes: authorised by the AI service's control token, not an API key. */
+const CONTROL_ROUTES = new Set([
+  "POST /v1/internal/chat/grants/claim",
+  "POST /v1/internal/chat/operations/:operationId/result",
+  "POST /v1/internal/chat/operations/:operationId/compaction",
+  "POST /v1/internal/chat/operations/:operationId/telemetry",
+]);
+/** The public writes: a visitor's question, compaction, retry, Stop and clear of their own conversation. */
+const VISITOR_WRITES = new Set([
+  "POST /v1/chat/conversation/messages",
+  "POST /v1/chat/conversation/compact",
+  "POST /v1/chat/operations/:operationId/stop",
+  "POST /v1/chat/operations/:operationId/retry",
+  "DELETE /v1/chat/conversation",
+]);
+
 interface Operation {
   operationId?: string;
   parameters?: { name: string; in: string; required?: boolean; schema: Record<string, unknown> }[];
@@ -65,6 +81,7 @@ describe("the OpenAPI document and the reference", () => {
     expect(document.openapi).toBe("3.1.0");
     expect(document.components.securitySchemes).toEqual({
       bearerAuth: expect.objectContaining({ type: "http", scheme: "bearer" }) as unknown,
+      controlToken: expect.objectContaining({ type: "http", scheme: "bearer" }) as unknown,
     });
   });
 
@@ -73,7 +90,11 @@ describe("the OpenAPI document and the reference", () => {
       const documented = operation(route.method, route.path);
       const statuses = Object.keys(documented.responses);
 
-      if (route.access === "private") {
+      const name = `${route.method} ${route.path}`;
+      if (CONTROL_ROUTES.has(name)) {
+        expect(documented.security, name).toEqual([{ controlToken: [] }]);
+        expect(statuses).toContain("401");
+      } else if (route.access === "private") {
         expect(documented.security).toEqual([{ bearerAuth: [] }]);
         expect(statuses).toContain("401");
       } else {
@@ -81,7 +102,9 @@ describe("the OpenAPI document and the reference", () => {
         expect(statuses).not.toContain("401");
       }
       if (route.hasBody) {
-        expect(statuses).toEqual(expect.arrayContaining(["400", "413", "415"]));
+        // A visitor write refuses a body that is not JSON as 403 before reading it.
+        const media = VISITOR_WRITES.has(name) ? "403" : "415";
+        expect(statuses, name).toEqual(expect.arrayContaining(["400", "413", media]));
       }
       expect(statuses).toEqual(expect.arrayContaining(["429", "500"]));
       expect(documented.responses["429"]?.headers).toHaveProperty("Retry-After");
@@ -91,6 +114,21 @@ describe("the OpenAPI document and the reference", () => {
         );
       }
     }
+  });
+
+  it("documents the telemetry registration under the control token", () => {
+    const registration = operation("POST", "/v1/internal/chat/operations/:operationId/telemetry");
+    expect(registration.operationId).toBe("registerChatTelemetry");
+    expect(registration.security).toEqual([{ controlToken: [] }]);
+    expect(registration.requestBody?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ChatTelemetryRegistration" } },
+    });
+    expect(registration.responses["200"]?.content).toEqual({
+      "application/json": { schema: { $ref: "#/components/schemas/ChatTelemetryRegistered" } },
+    });
+    expect(Object.keys(registration.responses)).toEqual(
+      expect.arrayContaining(["400", "401", "403", "409"]),
+    );
   });
 
   it("is generated from the contract schemas", () => {
@@ -846,7 +884,11 @@ describe("the OpenAPI document and the reference", () => {
         (parameter) => parameter.in === "header",
       );
       if (route.audit === null) {
-        expect(headers, `${route.method} ${route.path}`).toEqual([]);
+        // A read may document a request header of its own, such as `Last-Event-ID`.
+        expect(
+          headers.filter((header) => header.name === auditProvenanceHeader),
+          `${route.method} ${route.path}`,
+        ).toEqual([]);
         continue;
       }
       expect(headers, `${route.method} ${route.path}`).toEqual([

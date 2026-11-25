@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type Ref,
+  type SubmitEvent,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowRight, ArrowUp, Plus, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, RotateCcw, Square } from "lucide-react";
 
 import { Button } from "@sebela/ui/components/button";
 import { Input } from "@sebela/ui/components/input";
@@ -11,35 +19,47 @@ import { cn } from "@sebela/ui/lib/utils";
 
 import { chatQuestionMaxLength } from "@sebela/contracts";
 
-import { conversationHref, conversationIdFromParam } from "../data/address";
-import type { AskEvidence } from "../data/evidence";
+import { routes } from "../../_shared";
+import { handOffIdFromParam } from "../data/address";
+import { commandSuggestions, readComposerInput, type ChatCommand } from "../data/commands";
+import { describeCompaction } from "../data/compaction";
 import { isChatTurnOpen, type ChatTurn } from "../data/conversation";
-import { askSuggestions } from "../data/prepared-answers";
+import { askSuggestions } from "../data/suggestions";
 import { describeChatTurn } from "../data/turn-status";
+import { answeredWith, chatUsageRefreshAt, describeChatUsage } from "../data/usage";
 import { chatTurnParts, useChatScroll } from "../hooks/use-chat-scroll";
-import { useConversation } from "../hooks/use-conversation";
+import { useChatUsage, useConversation } from "../hooks/use-conversation";
 import { AnswerBlock, AnswerSources } from "./answer-blocks";
+import { ClearConversation } from "./clear-conversation";
+import { CommandMenu, commandMenuId, commandOptionId } from "./command-menu";
+import { UsagePanel, UsageRestriction } from "./usage-panel";
 
 /**
  * The latest turn asked on this page reaches from just below the header (the question's scroll
- * margin) to the composer (76 px) with the column's gap (20 px, 40 px from `sm`) between them.
+ * margin) to the composer (120 px with its collapsed usage line) with the column's gap (20 px,
+ * 40 px from `sm`) between them.
  */
 const roomyTurnClass =
-  "min-h-[calc(100dvh-var(--header-height)-7.25rem)] sm:min-h-[calc(100dvh-var(--header-height)-8.5rem)]";
+  "min-h-[calc(100dvh-var(--header-height)-10rem)] sm:min-h-[calc(100dvh-var(--header-height)-11.25rem)]";
+
+/** How often the usage panel's relative times ("in 25 min") are said again. */
+const usageTickMs = 30_000;
 
 const textLinkClass =
   "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline focus-visible:underline";
 
 interface AnswerProps {
   readonly turn: ChatTurn;
+  /** "Answered with …" when the answer's model differs from the one the site uses now. */
+  readonly modelNote: string | null;
   /** Asks again; given only for the latest turn, shown only where a retry can help. */
   readonly onRetry?: () => void;
   readonly ref?: Ref<HTMLDivElement>;
 }
 
-function Answer({ turn, onRetry, ref }: AnswerProps) {
+function Answer({ turn, modelNote, onRetry, ref }: AnswerProps) {
   const open = isChatTurnOpen(turn);
-  const { tag, note, retry, showsEvidence } = describeChatTurn(turn);
+  const { tag, note, retry, showsEvidence, contact } = describeChatTurn(turn);
   return (
     // Focus lands here after a retry, so the keyboard stays at the answer it asked again.
     <div
@@ -54,6 +74,9 @@ function Answer({ turn, onRetry, ref }: AnswerProps) {
         {tag === null ? null : (
           <span className="type-tag rounded-sm border border-border px-1.5">{tag}</span>
         )}
+        {modelNote === null ? null : (
+          <span className="type-label text-muted-foreground">{modelNote}</span>
+        )}
       </p>
       {turn.text.length === 0 && open ? (
         <p className="text-muted-foreground">Answering…</p>
@@ -66,6 +89,12 @@ function Answer({ turn, onRetry, ref }: AnswerProps) {
           <RotateCcw aria-hidden="true" />
           Try again
         </Button>
+      ) : null}
+      {contact ? (
+        <Link href={routes.contact} prefetch={false} className={cn(textLinkClass, "self-start")}>
+          Contact
+          <ArrowRight aria-hidden="true" className="size-4" />
+        </Link>
       ) : null}
       {showsEvidence ? <AnswerEvidence turn={turn} /> : null}
     </div>
@@ -103,27 +132,87 @@ function AnswerEvidence({ turn }: { readonly turn: ChatTurn }) {
   );
 }
 
+/** How long the API keeps the conversation, said before anything is asked. */
+function storageNotice(retentionDays: number): string {
+  const days = retentionDays === 1 ? "1 day" : `${String(retentionDays)} days`;
+  return `This conversation is stored for ${days} after its last activity, so you can come back to it in this browser.`;
+}
+
+/** What a clear did, as the page says it; a pending deletion is never said to be done. */
+function clearedNotice(telemetryDeletion: "none" | "pending"): string {
+  return telemetryDeletion === "pending"
+    ? "Your conversation was cleared. Copies kept for monitoring the assistant are scheduled for deletion and are not deleted yet."
+    : "Your conversation was cleared.";
+}
+
+const clearNotices = {
+  changed:
+    "The conversation changed in another tab, so nothing was cleared. It is shown as it is now.",
+  failed: "The conversation could not be cleared right now. Try again later.",
+} as const;
+
 /**
- * The chat on the Ask page: the conversation named by the address (`?c=`) or a new one, its
- * questions and streamed answers with their cards, sources and related pages, the four suggested questions of an empty chat, "New chat" and
- * the composer. It is an assistant answering about the person from the public profile and says
- * so; it never speaks as the person. Opening the address again — a rerender, back or forward —
- * never resends a question. A question the reader sends goes to just below the header and its
- * answer streams below it without moving the page; "Latest" brings back the end once it is out of
- * view (`useChatScroll`).
+ * The chat on the Ask page: the visitor's own conversation as the API stores it (the newest page,
+ * with "Show earlier messages" for the rest), its questions and streamed answers with their cards,
+ * sources and related pages, the four suggested questions of an empty chat, how long the
+ * conversation is kept, and the composer with the person check. It is an assistant answering
+ * about the person from the public profile and says so; it never speaks as the person. The address
+ * (`?c=`) only carries the hero's question here, once: it never names or opens a conversation, and
+ * the page drops it after use, so a reload, back or forward never resends. A question the reader
+ * sends goes to just below the header and its answer streams below it without moving the page;
+ * "Latest" brings back the end once it is out of view (`useChatScroll`). While the latest answer
+ * is open, in this tab or another of the visitor's, "Stop answering" takes the send button's place
+ * and no other question can be sent. "Clear conversation" deletes the conversation after a
+ * confirmation; the page says when copies are still to be deleted, never that they were. A leading
+ * slash in the composer opens the command suggestions (only `/compact`); `/compact` compacts the
+ * assistant's working context without adding a question, with its progress and end in a status
+ * line and "Stop compacting" in the send button's place while it runs, in any tab. Any other
+ * command is explained on the page and never sent.
  */
-export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
-  const { name } = evidence;
+export function ChatView({
+  name,
+  available,
+  siteKey,
+}: {
+  readonly name: string;
+  /** Whether the website has the chat; without it the page asks the API nothing. */
+  readonly available: boolean;
+  /** The public key of the person check; null when the website has none. */
+  readonly siteKey: string | null;
+}) {
   const searchParams = useSearchParams();
-  const addressId = conversationIdFromParam(searchParams.get("c"));
-  const { snapshot, current, open, submit, retry, newChat } = useConversation(evidence);
+  const handOffId = handOffIdFromParam(searchParams.get("c"));
+  const {
+    snapshot,
+    current,
+    open,
+    submit,
+    retry,
+    stop,
+    clear,
+    compact,
+    loadEarlier,
+    challengeRef,
+  } = useConversation(siteKey, available);
+  /** Why the last clear did nothing, until the next one or the next question. */
+  const [clearNotice, setClearNotice] = useState<keyof typeof clearNotices | null>(null);
+  /** Whether the last stop could not reach the API, until the next stop or question. */
+  const [stopFailed, setStopFailed] = useState(false);
   const [question, setQuestion] = useState("");
+  /** Why the composer's command was not run, until the text changes or something is sent. */
+  const [commandNotice, setCommandNotice] = useState<string | null>(null);
+  /** Whether the composer has focus, which the command suggestions need. */
+  const [composing, setComposing] = useState(false);
+  /** The text the command suggestions were dismissed at (Escape or a choice), until it changes. */
+  const [dismissedAt, setDismissedAt] = useState<string | null>(null);
+  /** The suggestion the arrow keys are on. */
+  const [activeCommand, setActiveCommand] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const conversationRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const lastAnswerRef = useRef<HTMLDivElement>(null);
-  // The address this page gave its own conversation; reaching it is not opening anything.
-  const ownAddress = useRef<string | null>(null);
+  // Whether the page opened the conversation; dropping the hand-off address opens nothing again.
+  const opened = useRef(false);
   const turnCount = snapshot.turns.length;
   const latest = snapshot.turns.at(-1);
   const [watched, setWatched] = useState<string | null>(null);
@@ -133,14 +222,78 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
     snapshot,
     current,
   });
+  const { usage, refresh: refreshUsage } = useChatUsage();
+  const [usageOpen, setUsageOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const usageView = useMemo(() => describeChatUsage(usage, now), [usage, now]);
+  const currentModel = usage.status === "ready" ? usage.usage.model : null;
+  const showsUsage = available && snapshot.history !== "unavailable";
+  // Read only after the conversation's first read settled: a first visit's identity cookie comes
+  // with that answer, and a read sent beside it would be given an identity of its own.
+  const readsUsage = available && (snapshot.history === "ready" || snapshot.history === "failed");
 
-  // A conversation opened from the address shows its end once; the hero's question goes to the
-  // top like one asked here.
+  // The usage is read again whenever the conversation could have changed it: when the page opens
+  // or reads the conversation, a question is added, and an answer starts or ends (in any tab).
+  // A compaction is read again as it starts and ends, which also shows the estimate after it.
+  const usageKey = `${snapshot.history}|${String(turnCount)}|${latest?.requestId ?? ""}|${String(latest !== undefined && isChatTurnOpen(latest))}|${snapshot.compaction?.requestId ?? ""}|${snapshot.compaction?.status ?? ""}`;
   useEffect(() => {
-    if (addressId !== null && addressId === ownAddress.current) return;
-    ownAddress.current = null;
-    request(open(addressId));
-  }, [addressId, open, request]);
+    if (readsUsage) void refreshUsage();
+  }, [usageKey, readsUsage, refreshUsage]);
+
+  // ...when the tab is shown again, and the relative times move on every half minute.
+  useEffect(() => {
+    if (!readsUsage) return;
+    const tick = window.setInterval(() => {
+      setNow(Date.now());
+    }, usageTickMs);
+    function onVisible(): void {
+      if (document.visibilityState !== "visible") return;
+      setNow(Date.now());
+      void refreshUsage();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [readsUsage, refreshUsage]);
+
+  // ...and when capacity comes back by itself: a question frees up, the day resets or a pause ends.
+  useEffect(() => {
+    if (!readsUsage) return;
+    const at = chatUsageRefreshAt(usage, Date.now());
+    if (at === null) return;
+    const timer = window.setTimeout(
+      () => {
+        setNow(Date.now());
+        void refreshUsage();
+      },
+      Math.max(0, at - Date.now()) + 1_000,
+    );
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [usage, readsUsage, refreshUsage]);
+
+  function toggleUsage(next: boolean): void {
+    setUsageOpen(next);
+    if (next && readsUsage) {
+      setNow(Date.now());
+      void refreshUsage();
+    }
+  }
+
+  // The stored conversation shows its end once; the hero's question goes to the top like one
+  // asked here, or into the composer while an earlier answer is still being prepared.
+  useEffect(() => {
+    if (handOffId === null && opened.current) return;
+    opened.current = true;
+    void open(handOffId).then((result) => {
+      if (result.kind === "held") setQuestion(result.question);
+      request(result.kind === "sent" ? "sent" : "shown");
+      if (handOffId !== null) window.history.replaceState(null, "", routes.ask);
+    });
+  }, [handOffId, open, request]);
 
   // Announces an answer this page saw start, once as it starts and once as it ends; never every
   // streamed piece, and never an answer restored as it was.
@@ -159,19 +312,79 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
           : "";
 
   function ask(text: string): void {
-    const { result, conversationId } = submit(text);
-    if (result !== "sent") return;
+    if (submit(text) !== "sent") return;
+    setClearNotice(null);
+    setStopFailed(false);
+    setCommandNotice(null);
     setQuestion("");
     request("sent");
-    if (conversationId !== addressId) {
-      ownAddress.current = conversationId;
-      window.history.replaceState(null, "", conversationHref(conversationId));
-    }
   }
 
   function onSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
-    ask(question);
+    const input = readComposerInput(question);
+    if (input.kind === "question") {
+      ask(question);
+      return;
+    }
+    if (input.kind === "invalid") {
+      setCommandNotice(input.message);
+      return;
+    }
+    if (compact() !== "started") return;
+    setClearNotice(null);
+    setStopFailed(false);
+    setCommandNotice(null);
+    setQuestion("");
+  }
+
+  function changeQuestion(text: string): void {
+    setQuestion(text);
+    setCommandNotice(null);
+    setActiveCommand(0);
+    if (dismissedAt !== text) setDismissedAt(null);
+  }
+
+  const suggestions = commandSuggestions(question);
+  const menuOpen =
+    composing &&
+    snapshot.history !== "unavailable" &&
+    suggestions.length > 0 &&
+    dismissedAt !== question;
+  const activeIndex = Math.min(activeCommand, suggestions.length - 1);
+
+  /** Puts the chosen command in the input; Enter or send then runs it. */
+  function chooseCommand(command: ChatCommand): void {
+    setQuestion(command.name);
+    setCommandNotice(null);
+    setDismissedAt(command.name);
+    inputRef.current?.focus();
+  }
+
+  function onComposerKey(event: KeyboardEvent<HTMLInputElement>): void {
+    if (!menuOpen) {
+      if (event.key === "ArrowDown" && suggestions.length > 0) {
+        event.preventDefault();
+        setDismissedAt(null);
+        setActiveCommand(0);
+      }
+      return;
+    }
+    const count = suggestions.length;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActiveCommand((activeIndex + step + count) % count);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setDismissedAt(question);
+    } else if (event.key === "Enter") {
+      const chosen = suggestions[activeIndex];
+      // A command typed in full runs at once; a part of one is completed first.
+      if (chosen === undefined || chosen.name === question.trim().toLowerCase()) return;
+      event.preventDefault();
+      chooseCommand(chosen);
+    }
   }
 
   function retryLatest(requestId: string): void {
@@ -182,46 +395,84 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
     lastAnswerRef.current?.focus({ preventScroll: true });
   }
 
+  function stopLatest(requestId: string): void {
+    setStopFailed(false);
+    void stop(requestId).then((result) => {
+      setStopFailed(result === "failed");
+    });
+  }
+
+  function clearConversation(): void {
+    setClearNotice(null);
+    setStopFailed(false);
+    void clear().then((result) => {
+      setClearNotice(result === "cleared" ? null : result);
+    });
+  }
+
+  const answering = latest !== undefined && isChatTurnOpen(latest) ? latest : null;
+  const compaction = snapshot.compaction;
+  const compacting = compaction !== null && compaction.status !== "ended" ? compaction : null;
+  const compactionNotice = compaction === null ? null : describeCompaction(compaction);
+  const composerNotice = stopFailed
+    ? "The answer could not be stopped. It is still being prepared."
+    : (commandNotice ?? compactionNotice?.text ?? null);
+  const notice =
+    clearNotice !== null
+      ? clearNotices[clearNotice]
+      : snapshot.telemetryDeletion === null
+        ? null
+        : clearedNotice(snapshot.telemetryDeletion);
+
   function showLatest(): void {
     toLatest();
     // The button goes once the end is in view; the keyboard continues at the latest answer.
     lastAnswerRef.current?.focus({ preventScroll: true });
   }
 
-  function startNewChat(): void {
-    newChat();
-    setQuestion("");
-    window.history.replaceState(null, "", conversationHref(null));
-    inputRef.current?.focus();
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 sm:gap-10">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-col gap-4">
-          <h1 className="flex flex-col gap-3">
-            <span className="type-label">{name}</span>
-            <span className="type-heading sm:type-title">Ask my AI</span>
-          </h1>
-          <p className="type-intro max-w-prose">
-            An AI assistant that answers questions about {name}&apos;s experience, projects,
-            services and learning from the public profile. It is not {name}.
+      <header className="flex flex-col gap-4">
+        <h1 className="flex flex-col gap-3">
+          <span className="type-label">{name}</span>
+          <span className="type-heading sm:type-title">Ask my AI</span>
+        </h1>
+        <p className="type-intro max-w-prose">
+          An AI assistant that answers questions about {name}&apos;s experience, projects, services
+          and learning from the public profile. It is not {name}.
+        </p>
+        {snapshot.retentionDays === null ? null : (
+          <p className="max-w-prose text-sm text-pretty text-muted-foreground">
+            {storageNotice(snapshot.retentionDays)}
           </p>
-        </div>
-        {turnCount === 0 ? null : (
-          <Button
-            type="button"
-            variant="ghost"
-            className="-ml-3 shrink-0 self-start px-3 text-muted-foreground hover:text-foreground sm:-mr-3 sm:ml-0"
-            onClick={startNewChat}
-          >
-            <Plus aria-hidden="true" />
-            New chat
-          </Button>
         )}
+        {snapshot.history === "ready" && turnCount > 0 ? (
+          <ClearConversation
+            disabled={snapshot.busy && answering === null && compacting === null}
+            onConfirm={clearConversation}
+          />
+        ) : null}
+        <p
+          role="status"
+          className="max-w-prose text-sm text-pretty text-muted-foreground empty:hidden"
+        >
+          {notice}
+        </p>
       </header>
 
-      {turnCount === 0 ? (
+      {snapshot.history === "unavailable" ? (
+        <div className="flex flex-col gap-3">
+          <p className="text-muted-foreground">The chat is not available right now.</p>
+          <Link href={routes.contact} prefetch={false} className={cn(textLinkClass, "self-start")}>
+            Contact
+            <ArrowRight aria-hidden="true" className="size-4" />
+          </Link>
+        </div>
+      ) : snapshot.history === "loading" && turnCount === 0 ? (
+        <p aria-busy="true" className="text-muted-foreground">
+          Loading your conversation…
+        </p>
+      ) : turnCount === 0 ? (
         <section aria-labelledby="ask-suggestions-heading" className="flex flex-col gap-4">
           <h2 id="ask-suggestions-heading" className="type-label">
             Suggested questions
@@ -244,40 +495,64 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
           </ul>
         </section>
       ) : (
-        <ol ref={conversationRef} aria-label="Conversation" className="flex flex-col gap-10">
-          {snapshot.turns.map((turn, index) => (
-            <li
-              key={turn.requestId}
-              {...{ [chatTurnParts.requestId]: turn.requestId }}
-              className={cn(
-                "flex flex-col gap-6",
-                // From the question below the header down to the composer, so the question can
-                // reach the top however short the conversation is.
-                roomy && index === turnCount - 1 && roomyTurnClass,
-              )}
+        <div className="flex flex-col gap-10">
+          {snapshot.earlier === "none" ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              className="self-center text-muted-foreground hover:text-foreground"
+              disabled={snapshot.earlier === "loading"}
+              onClick={() => {
+                void loadEarlier();
+              }}
             >
-              <div
-                {...{ [chatTurnParts.question]: "" }}
-                className="ml-auto max-w-[85%] scroll-mt-[calc(var(--header-height)+1.25rem)] rounded-xl bg-muted px-4 py-3"
+              {snapshot.earlier === "loading"
+                ? "Loading earlier messages…"
+                : "Show earlier messages"}
+            </Button>
+          )}
+          <ol ref={conversationRef} aria-label="Conversation" className="flex flex-col gap-10">
+            {snapshot.turns.map((turn, index) => (
+              <li
+                key={turn.requestId}
+                {...{ [chatTurnParts.requestId]: turn.requestId }}
+                className={cn(
+                  "flex flex-col gap-6",
+                  // From the question below the header down to the composer, so the question can
+                  // reach the top however short the conversation is.
+                  roomy && index === turnCount - 1 && roomyTurnClass,
+                )}
               >
-                <p className="sr-only">You asked:</p>
-                <p className="text-pretty whitespace-pre-line">{turn.question}</p>
-              </div>
-              {index === turnCount - 1 ? (
-                <Answer
-                  ref={lastAnswerRef}
-                  turn={turn}
-                  onRetry={() => {
-                    retryLatest(turn.requestId);
-                  }}
-                />
-              ) : (
-                <Answer turn={turn} />
-              )}
-            </li>
-          ))}
-        </ol>
+                <div
+                  {...{ [chatTurnParts.question]: "" }}
+                  className="ml-auto max-w-[85%] scroll-mt-[calc(var(--header-height)+1.25rem)] rounded-xl bg-muted px-4 py-3"
+                >
+                  <p className="sr-only">You asked:</p>
+                  <p className="text-pretty whitespace-pre-line">{turn.question}</p>
+                </div>
+                {index === turnCount - 1 ? (
+                  <Answer
+                    ref={lastAnswerRef}
+                    turn={turn}
+                    modelNote={answeredWith(turn.model, currentModel)}
+                    onRetry={() => {
+                      retryLatest(turn.requestId);
+                    }}
+                  />
+                ) : (
+                  <Answer turn={turn} modelNote={answeredWith(turn.model, currentModel)} />
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
+
+      {snapshot.history === "failed" ? (
+        <p className="text-sm text-muted-foreground">
+          Your earlier conversation could not be loaded right now. You can still ask a question.
+        </p>
+      ) : null}
 
       <p role="status" aria-live="polite" className="sr-only">
         {live}
@@ -296,6 +571,20 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
             Latest
           </Button>
         ) : null}
+        {/* The person check shows here only when it needs the visitor. */}
+        <div ref={challengeRef} className="empty:hidden [&:has(iframe)]:pb-3" />
+        <p role="status" className="pb-3 text-sm text-pretty text-muted-foreground empty:hidden">
+          {composerNotice}
+        </p>
+        {showsUsage ? (
+          <>
+            <UsageRestriction restriction={usageView.restriction} />
+            <UsagePanel view={usageView} open={usageOpen} onOpenChange={toggleUsage} />
+          </>
+        ) : null}
+        {menuOpen ? (
+          <CommandMenu commands={suggestions} active={activeIndex} onChoose={chooseCommand} />
+        ) : null}
         <form aria-label="Ask a question" onSubmit={onSubmit} className="flex gap-2">
           <label htmlFor="ask-question" className="sr-only">
             Your question
@@ -305,23 +594,65 @@ export function ChatView({ evidence }: { readonly evidence: AskEvidence }) {
             id="ask-question"
             name="question"
             type="text"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={menuOpen}
+            aria-controls={commandMenuId}
+            aria-activedescendant={menuOpen ? commandOptionId(activeIndex) : undefined}
             autoComplete="off"
             enterKeyHint="send"
             maxLength={chatQuestionMaxLength}
-            placeholder="Ask a question"
+            placeholder="Ask a question, or type /"
+            disabled={snapshot.history === "unavailable"}
             value={question}
             onChange={(event) => {
-              setQuestion(event.target.value);
+              changeQuestion(event.target.value);
+            }}
+            onKeyDown={onComposerKey}
+            onFocus={() => {
+              setComposing(true);
+            }}
+            onBlur={() => {
+              setComposing(false);
             }}
           />
-          <Button
-            type="submit"
-            className="size-12"
-            aria-label="Send"
-            disabled={snapshot.busy || question.trim().length === 0}
-          >
-            <ArrowUp aria-hidden="true" />
-          </Button>
+          {compacting !== null ? (
+            // In place of the send button while the working context is being compacted, in
+            // whichever tab it was asked; its operation says when it stopped.
+            <Button
+              type="button"
+              className="size-12"
+              aria-label="Stop compacting"
+              disabled={compacting.status === "running" && compacting.stopping}
+              onClick={() => {
+                void stop(compacting.requestId);
+              }}
+            >
+              <Square aria-hidden="true" className="fill-current" />
+            </Button>
+          ) : answering === null ? (
+            <Button
+              type="submit"
+              className="size-12"
+              aria-label="Send"
+              disabled={snapshot.busy || question.trim().length === 0}
+            >
+              <ArrowUp aria-hidden="true" />
+            </Button>
+          ) : (
+            // In place of the send button while the latest answer is open, in whichever tab it
+            // was asked; the answer's stream says when it stopped.
+            <Button
+              type="button"
+              className="size-12"
+              aria-label="Stop answering"
+              onClick={() => {
+                stopLatest(answering.requestId);
+              }}
+            >
+              <Square aria-hidden="true" className="fill-current" />
+            </Button>
+          )}
         </form>
       </div>
     </div>

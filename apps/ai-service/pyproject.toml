@@ -1,0 +1,88 @@
+[project]
+name = "ai-service"
+version = "0.0.0"
+description = "The internal AI service: guarded chat generation for the API and bounded public read capabilities."
+readme = "AGENTS.md"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "anthropic==2.11.0",
+  "fastapi==0.165.0",
+  "httpx2==2.16.2",
+  "langchain-core==1.8.4",
+  "llm-agent",
+  "pydantic==2.14.4",
+  "sebela-api-client",
+  "uvicorn==0.54.0",
+]
+
+# The agent library and the generated API client, members of the same uv workspace
+# (packages/llm-agent, packages/api-client-python).
+[tool.uv.sources]
+llm-agent = { workspace = true }
+sebela-api-client = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "coverage==7.17.3",
+  "mypy==2.4.1",
+  "pytest==9.2.0",
+  "pytest-asyncio==1.5.0",
+  "pytest-cov==7.1.0",
+  "ruff==0.17.6",
+]
+
+[project.scripts]
+ai-service = "ai_service.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.7.22,<0.8"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "ai_service"
+
+# Ruff is the formatter and the linter (docs/code-standards.md, Python).
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "ASYNC", "SIM", "RUF", "C4", "PT"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ai_service"]
+
+# mypy strict with the Pydantic plugin is the one type checker. The generated API client
+# (`sebela_api_client`, packages/api-client-python) is imported here only by the control client
+# (`ai_service.clients.control_api`) and, for its content reads, through llm-agent: its own bodies
+# are skipped (`ignore_errors`), its signatures type the callers.
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+files = ["src", "scripts", "tests"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = "sebela_api_client.*"
+ignore_errors = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["--strict-markers", "--strict-config"]
+
+# Test coverage (docs/testing.md, Coverage): measured only when the `test` task passes `--cov`,
+# which it does when TEST_COVERAGE is `true`; it informs and fails nothing (no `fail_under`).
+# The report is written to `coverage/`, ignored by Git.
+[tool.coverage.run]
+source_pkgs = ["ai_service"]
+data_file = "coverage/.coverage"

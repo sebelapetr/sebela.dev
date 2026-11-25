@@ -8,8 +8,13 @@
 #
 # - Every service starts without a profile: Postgres, the one-off migration, the API, the website
 #   and MCP Admin. The migration and the API run the API image, so a release migrates with the very
-#   image it then runs.
-# - Images come from GHCR by a tag per service (API_IMAGE_TAG, WEB_IMAGE_TAG, MCP_ADMIN_IMAGE_TAG),
+#   image it then runs. The AI service keeps its profile `ai-service`, which is the chat's switch:
+#   the owner adds it to COMPOSE_PROFILES in the production environment file together with the chat
+#   settings (infra/README.md, "The AI service and the visitor chat"), and a deployment then pulls,
+#   starts, health-checks and rolls back the AI service with the others. Without it the chat stays
+#   off and nothing of the AI service runs.
+# - Images come from GHCR by a tag per service (API_IMAGE_TAG, WEB_IMAGE_TAG, MCP_ADMIN_IMAGE_TAG,
+#   AI_SERVICE_IMAGE_TAG),
 #   so a release changes only the services it rebuilt. Nothing is built on the server.
 # - Only the website is published, on WEB_HOST and WEB_PORT (the host's loopback interface, where
 #   the server's nginx proxies to it). Postgres, the API and MCP Admin have no host port: the
@@ -70,5 +75,17 @@ services:
     # proxies to it, so it has no public address. Authentication still applies to every request.
     ports: !override
       - "${MCP_ADMIN_HOST:?set MCP_ADMIN_HOST (infra/production/.env.example)}:${MCP_ADMIN_PORT:?set MCP_ADMIN_PORT (infra/production/.env.example)}:8080"
+    logging: *logging
+    restart: unless-stopped
+
+  # The AI service behind the chat. It stays behind its profile `ai-service` (no `!reset`), the
+  # chat's switch: while COMPOSE_PROFILES of the production environment file does not name it, a
+  # deployment neither pulls nor starts it and the chat stays off. Once it does, the deployment
+  # script names it with the other services, waits for its health check and rolls it back with
+  # them. It refuses the fictional model here (STORAGE_ENVIRONMENT=production), so it needs the
+  # paid model's settings. No host port: only the API reaches it, inside the chat network.
+  ai-service:
+    build: !reset null
+    image: ghcr.io/sebelapetr/sebela-ai-service:${AI_SERVICE_IMAGE_TAG:-}
     logging: *logging
     restart: unless-stopped

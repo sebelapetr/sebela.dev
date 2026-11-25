@@ -29,7 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from evals.datasets.cases import FIXED_TODAY, EvalCase
 
-RUBRIC_VERSION = "rubric-v5"
+RUBRIC_VERSION = "rubric-v6"
 JUDGE_MODEL = "claude-sonnet-5-5"
 JUDGE_EFFORT: Final = "medium"
 #: Output cap of one judge call, including adaptive thinking.
@@ -57,8 +57,9 @@ below the answer text. It counts as evidence: a claim that points the visitor to
 repeats its details, is supported. When it is null, no card is shown.
 answer.blocks are cards the website shows below the text (experience, service, exploration or
 roadmap cards). Code builds them from cited evidence items, so they are not claims of the answer;
-a claim that points the visitor to a card is supported by it. Status values are exact: "tested"
-work is not built or delivered, and "designed" work is not implemented.
+a claim that points the visitor to a card is supported by it. Status values are exact and read as
+the assistant's own rules read them: "built" work is delivered work, "tested" work was only tried
+and is not built or delivered, and "designed" work is a design that is not implemented.
 today is the visitor's calendar day (Europe/Prague); "this week", "last seven days" and similar
 windows are relative to it. Learning records (current focus, roadmap progress, diary, statistics,
 books, events) show what the person studies or attended, not professional expertise or delivered

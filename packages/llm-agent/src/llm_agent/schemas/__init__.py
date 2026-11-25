@@ -1,6 +1,15 @@
-"""The public request, limit and result contracts of the chat operation."""
+"""The public request, limit and result contracts of the chat and compaction operations."""
 
-from llm_agent.schemas.requests import ChatExchange, ChatRequest, ExchangeSource, ExecutionLimits
+from llm_agent.schemas.compaction import CompactionOutcome, CompactionResult
+from llm_agent.schemas.requests import (
+    ChatExchange,
+    ChatRequest,
+    CompactionRequest,
+    ContextSummary,
+    ExchangeSource,
+    ExecutionLimits,
+    SummaryReference,
+)
 from llm_agent.schemas.responses import (
     Block,
     ChatResult,
@@ -26,8 +35,12 @@ __all__ = [
     "ChatExchange",
     "ChatRequest",
     "ChatResult",
+    "CompactionOutcome",
+    "CompactionRequest",
+    "CompactionResult",
     "ContactCard",
     "ContactLink",
+    "ContextSummary",
     "Evidence",
     "ExchangeSource",
     "ExecutionLimits",
@@ -40,6 +53,7 @@ __all__ = [
     "Source",
     "SourceKind",
     "Span",
+    "SummaryReference",
     "ToolName",
     "Usage",
     "Versions",

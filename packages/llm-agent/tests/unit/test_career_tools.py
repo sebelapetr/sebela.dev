@@ -491,3 +491,13 @@ async def test_more_tool_requests_than_the_cap_stop_before_any_read() -> None:
     assert result.outcome == "limit_reached"
     assert result.reason == "tool_calls"
     assert content.reads == 0
+
+
+async def test_the_public_profile_view_is_exactly_what_get_profile_gives_the_model() -> None:
+    from llm_agent import profile_view
+    from tests.unit.fakes import PERSON
+
+    _, models = await run([tools("get_profile"), draft(refs=())])
+    [seen] = tool_results(models)
+    assert seen["data"] == profile_view(PERSON)
+    assert {"id", "email", "links"}.isdisjoint(profile_view(PERSON))

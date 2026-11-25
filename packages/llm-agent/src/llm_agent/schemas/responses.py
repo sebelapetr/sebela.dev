@@ -170,6 +170,8 @@ class Usage(_Frozen):
 class Span(_Frozen):
     name: str
     status: str
+    #: Milliseconds from the execution's start (its tracer's creation) to this span's start.
+    start_ms: int = 0
     duration_ms: int
     attributes: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
 
@@ -185,6 +187,8 @@ class Versions(_Frozen):
     main_effort: str
     security_prompt: str
     chat_prompt: str
+    #: The compaction prompt and the summary schema the model returns (`ChatAgent.compact`).
+    compact_prompt: str
     tools: str
     output_guard: str
     #: The fingerprint of every module of the package: guard rules, tool projections, settings.

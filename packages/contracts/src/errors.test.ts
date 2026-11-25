@@ -27,6 +27,19 @@ describe("ErrorResponseSchema", () => {
     },
   );
 
+  it.each([
+    "forbidden",
+    "chat_request_conflict",
+    "chat_busy",
+    "chat_challenge_failed",
+    "chat_quota_exceeded",
+    "chat_budget_exhausted",
+    "chat_not_retryable",
+  ])("accepts the visitor chat refusal %s", (code) => {
+    const body = { error: { code, message: "The question was not accepted." } };
+    expect(ErrorResponseSchema.safeParse(body).success).toBe(true);
+  });
+
   it("rejects a code outside the documented list", () => {
     expect(
       ErrorResponseSchema.safeParse({ error: { code: "teapot", message: "I am a teapot." } })

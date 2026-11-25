@@ -4,6 +4,10 @@
 // the build context's allowlist. It reads root files only, so it is a repository check that runs on
 // every change (`pnpm ci:root`), not a package test that a root-only change would not select.
 //
+// The same holds for the AI service (issue #210): it shares the `chat` network with the API only,
+// publishes nothing, holds no database, storage or API key setting, and stops within a grace period
+// longer than its own shutdown grace plus Uvicorn's 10 s.
+//
 // The public edge in front of the website is phase 10; here it is enough that MCP Admin shares a
 // network with the API only (not with the website or Postgres), that nothing reaches it from
 // outside the host's loopback interface, and that it holds no database or storage setting.
@@ -24,7 +28,8 @@ const root = path.join(import.meta.dirname, "..", "..");
 /** @type {{ services: Record<string, any> }} */
 let rendered;
 
-before(() => {
+/** The rendered configuration of every profile from the example settings and the given overrides. */
+function render(overrides = {}) {
   // Only the example settings: never this checkout's own environment, so its values cannot appear.
   const output = execFileSync(
     "docker",
@@ -40,17 +45,23 @@ before(() => {
       "web",
       "--profile",
       "mcp-admin",
+      "--profile",
+      "ai-service",
       "config",
       "--format",
       "json",
     ],
     {
       cwd: root,
-      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...overrides },
       encoding: "utf8",
     },
   );
-  rendered = JSON.parse(output);
+  return JSON.parse(output);
+}
+
+before(() => {
+  rendered = render();
 });
 
 function service(name) {
@@ -94,7 +105,7 @@ describe("the MCP Admin container (D22, D23)", () => {
     assert.deepEqual(networksOf("mcp-admin"), ["admin"]);
     assert.deepEqual(networksOf("postgres"), ["database"]);
     assert.deepEqual(networksOf("migrate"), ["database"]);
-    assert.deepEqual(networksOf("api"), ["admin", "content", "database"]);
+    assert.deepEqual(networksOf("api"), ["admin", "chat", "content", "database"]);
     assert.deepEqual(networksOf("web"), ["content"]);
     const others = Object.keys(rendered.services).filter((name) => name !== "mcp-admin");
     for (const name of others) {
@@ -118,6 +129,93 @@ describe("the MCP Admin container (D22, D23)", () => {
     for (const name of Object.keys(service("web").environment ?? {})) {
       assert.doesNotMatch(name, /API_KEY|MCP_ADMIN/);
     }
+  });
+});
+
+/** A Compose duration such as `1m15s` in seconds. */
+function seconds(duration) {
+  const units = { h: 3600, m: 60, s: 1 };
+  const parts = [...String(duration ?? "").matchAll(/(\d+)([hms])/g)];
+  return parts.reduce((total, [, amount, unit]) => total + Number(amount) * units[unit], 0);
+}
+
+describe("the AI service container (issue #210)", () => {
+  it("is a service of its own profile, built from its own image", () => {
+    const ai = service("ai-service");
+    assert.deepEqual(ai.profiles, ["ai-service"]);
+    assert.equal(ai.build?.dockerfile, "apps/ai-service/Dockerfile");
+  });
+
+  it("shares the chat network with the API only and publishes nothing", () => {
+    assert.deepEqual(networksOf("ai-service"), ["chat"]);
+    const others = Object.keys(rendered.services).filter((name) => name !== "ai-service");
+    for (const name of others) {
+      const shared = networksOf(name).filter((network) =>
+        networksOf("ai-service").includes(network),
+      );
+      assert.deepEqual(shared, name === "api" ? ["chat"] : [], name);
+    }
+    assert.deepEqual(service("ai-service").ports ?? [], []);
+    assert.deepEqual(service("ai-service").volumes ?? [], []);
+  });
+
+  it("reaches the API by its service name and holds no database, storage or API key setting", () => {
+    const environment = service("ai-service").environment ?? {};
+    const apiContainerPort = service("api").ports?.[0]?.target;
+    assert.notEqual(apiContainerPort, undefined);
+    assert.equal(environment.AI_SERVICE_API_URL, `http://api:${String(apiContainerPort)}`);
+    const names = Object.keys(environment);
+    assert.ok(names.length > 0);
+    for (const name of names) {
+      assert.match(name, /^(?:AI_SERVICE_[A-Z_]+|LLM_AGENT_PORT|ANTHROPIC_API_KEY)$/);
+      assert.doesNotMatch(name, /DATABASE|POSTGRES|STORAGE|MEDIA|MCP_ADMIN|FAKE_(?:CALLS|GATE)/);
+    }
+  });
+
+  it("passes no trace detector folder while none is accepted and none is mounted", () => {
+    assert.ok(!("AI_SERVICE_TRACE_DETECTOR_DIR" in (service("ai-service").environment ?? {})));
+  });
+
+  it("runs the fictional model unless the paid one is chosen explicitly", () => {
+    const environment = service("ai-service").environment ?? {};
+    assert.equal(environment.AI_SERVICE_MODEL ?? "", "");
+    assert.equal(environment.AI_SERVICE_ALLOW_PAID ?? "", "");
+  });
+
+  it("stops within a grace period longer than the longest shutdown grace plus 10 s", () => {
+    // AI_SERVICE_SHUTDOWN_GRACE_S is at most 65 s; Uvicorn allows the grace plus 10 s.
+    assert.ok(seconds(service("ai-service").stop_grace_period) >= 75);
+    assert.ok(service("ai-service").healthcheck?.test);
+    assert.equal(service("ai-service").restart, "unless-stopped");
+  });
+
+  it("is the API's AI service by name, with the tokens of the API's own chat settings", () => {
+    // The example settings leave the chat off, so the API is given no AI service address.
+    assert.equal(service("api").environment?.API_AI_SERVICE_URL ?? "", "");
+    const token = "a".repeat(32);
+    const controlToken = "b".repeat(32);
+    const on = render({ API_AI_SERVICE_TOKEN: token, API_AI_CONTROL_TOKEN: controlToken });
+    const api = on.services.api.environment ?? {};
+    const ai = on.services["ai-service"].environment ?? {};
+    assert.equal(api.API_AI_SERVICE_URL, `http://ai-service:${String(ai.LLM_AGENT_PORT)}`);
+    assert.equal(ai.AI_SERVICE_TOKEN, token);
+    assert.equal(ai.AI_SERVICE_CONTROL_TOKEN, controlToken);
+  });
+});
+
+describe("the AI service image", () => {
+  const dockerfile = readFileSync(path.join(root, "apps", "ai-service", "Dockerfile"), "utf8");
+
+  it("is built from the AI service and the Python packages it depends on, and runs unprivileged", () => {
+    assert.match(dockerfile, /--package ai-service/);
+    assert.doesNotMatch(dockerfile, /packages\/db|packages\/services|apps\/api/);
+    assert.match(dockerfile, /^USER app$/m);
+  });
+
+  it("enters the build context through the allowlist", () => {
+    const ignore = readFileSync(path.join(root, ".dockerignore"), "utf8").split("\n");
+    assert.ok(ignore.includes("!apps/ai-service/"));
+    assert.ok(ignore.includes("**/.env.*"));
   });
 });
 

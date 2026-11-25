@@ -183,6 +183,48 @@
       "when": 1795234417034,
       "tag": "0025_provider_usage_rerank",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795312967433,
+      "tag": "0026_chat_conversations",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1795329027794,
+      "tag": "0027_chat_request_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1795346554566,
+      "tag": "0028_chat_conversation_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795360560816,
+      "tag": "0029_usage_limits_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1795389210969,
+      "tag": "0030_chat_compaction",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795443931765,
+      "tag": "0031_telemetry_deletion_schedule",
+      "breakpoints": true
     }
   ]
 }

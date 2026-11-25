@@ -1,12 +1,21 @@
 """The portfolio chat agent: a guarded, bounded, bilingual answer over public content reads.
 
 This is the package's public interface; every other module is private to the package.
-`ChatAgent.run` is the one operation. Content arrives only through a `ContentReader` (the public
+`ChatAgent.run` answers one question; `ChatAgent.compact` folds a working context into a summary
+the caller passes with later questions. Content arrives only through a `ContentReader` (the public
 API in production) and models only through a `ModelFactory` (Anthropic in production, scripted
 fakes in tests).
 """
 
 from llm_agent.models.gateway import ChatModel, ModelCall, ModelFactory, anthropic_model_factory
+from llm_agent.observability.export import otlp_trace
+from llm_agent.observability.pseudonymization import (
+    Detector,
+    DetectorUnavailableError,
+    Finding,
+    Pseudonymizer,
+    open_detector,
+)
 from llm_agent.observability.telemetry import ExecutionRecord, TelemetrySink
 from llm_agent.pipelines.chat import ChatAgent
 from llm_agent.pipelines.chat.versions import versions
@@ -15,8 +24,12 @@ from llm_agent.schemas import (
     ChatExchange,
     ChatRequest,
     ChatResult,
+    CompactionOutcome,
+    CompactionRequest,
+    CompactionResult,
     ContactCard,
     ContactLink,
+    ContextSummary,
     Evidence,
     ExchangeSource,
     ExecutionLimits,
@@ -26,7 +39,10 @@ from llm_agent.schemas import (
     RoadmapCard,
     ServiceCard,
     Source,
+    SourceKind,
     Span,
+    SummaryReference,
+    ToolName,
     Usage,
     Versions,
 )
@@ -71,30 +87,58 @@ from llm_agent.tools.content import (
     PublicService,
     PublicServiceEvidence,
     PublicStep,
+    PublicTechnology,
+)
+from llm_agent.tools.registry import (
+    READ_CAPABILITIES,
+    READ_CAPABILITY_SPECS,
+    TOOL_SPECS,
+    CapabilityName,
+    InvalidToolArgumentsError,
+    RecordKind,
+    ToolNotAvailableError,
+    ToolPage,
+    ToolRecord,
+    ToolResultTooLargeError,
+    profile_view,
+    read_tool,
 )
 
 __all__ = [
+    "READ_CAPABILITIES",
+    "READ_CAPABILITY_SPECS",
+    "TOOL_SPECS",
     "ApiContentReader",
     "Block",
+    "CapabilityName",
     "ChatAgent",
     "ChatExchange",
     "ChatModel",
     "ChatRequest",
     "ChatResult",
+    "CompactionOutcome",
+    "CompactionRequest",
+    "CompactionResult",
     "ContactCard",
     "ContactLink",
     "ContentNotFoundError",
     "ContentReader",
     "ContentUnavailableError",
+    "ContextSummary",
+    "Detector",
+    "DetectorUnavailableError",
     "Evidence",
     "ExchangeSource",
     "ExecutionLimits",
     "ExecutionRecord",
     "ExperienceCard",
     "ExplorationCard",
+    "Finding",
+    "InvalidToolArgumentsError",
     "Language",
     "ModelCall",
     "ModelFactory",
+    "Pseudonymizer",
     "PublicBook",
     "PublicBookResource",
     "PublicCaseStudy",
@@ -131,13 +175,26 @@ __all__ = [
     "PublicService",
     "PublicServiceEvidence",
     "PublicStep",
+    "PublicTechnology",
+    "RecordKind",
     "RoadmapCard",
     "ServiceCard",
     "Source",
+    "SourceKind",
     "Span",
+    "SummaryReference",
     "TelemetrySink",
+    "ToolName",
+    "ToolNotAvailableError",
+    "ToolPage",
+    "ToolRecord",
+    "ToolResultTooLargeError",
     "Usage",
     "Versions",
     "anthropic_model_factory",
+    "open_detector",
+    "otlp_trace",
+    "profile_view",
+    "read_tool",
     "versions",
 ]

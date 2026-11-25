@@ -8,9 +8,5 @@
 # `pnpm check:api-client`. GitHub collapses them in pull request diffs and
 # leaves them out of the language statistics.
 packages/api-client/src/generated/** linguist-generated=true
-# The Python client of the content API. Phase 6 commits it inside
-# packages/llm-agent; #302 moves it into packages/api-client-python (import
-# name sebela_api_client). Both locations are listed; #302 removes the old
-# line and confirms the new one matches the folder it creates.
-packages/llm-agent/src/llm_agent/generated/** linguist-generated=true
+# The Python client of the content API (import name sebela_api_client).
 packages/api-client-python/src/sebela_api_client/** linguist-generated=true

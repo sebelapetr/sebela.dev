@@ -2,14 +2,14 @@
 
 When a person or a model grades sampled answers at a phase acceptance, the scores are only comparable with earlier ones if the yardstick is known. This file keeps the wording of the grading criteria, one version per wording, and says what is recorded with every grade ([#309](https://github.com/sebelapetr/sebela.dev/issues/309)).
 
-The grading criteria are what the grader is shown: the dimensions, the scale, what each score means and any instruction on how to check an answer. `criteria-v<n>` is the one scheme for them: it is the versioned grounding, relevance and language rubric that [#215](https://github.com/sebelapetr/sebela.dev/issues/215) describes for the human-review queue, so that work adds its wording here and starts no second scheme. They are separate from the judge's rubric (`rubric-v<n>` in `packages/llm-agent/evals/graders/rubric.py`), which the model judge applies during a run.
+The grading criteria are what the grader is shown: the dimensions, the scale, what each score means and any instruction on how to check an answer. `criteria-v<n>` is the one scheme for them: it is the versioned grounding, relevance and language rubric that the human grading of phase 7 ([#216](https://github.com/sebelapetr/sebela.dev/issues/216)) and a later human-review queue use, so that work adds its wording here and starts no second scheme. They are separate from the judge's rubric (`rubric-v<n>` in `packages/llm-agent/evals/graders/rubric.py`), which the model judge applies during a run.
 
 ## Versioning rule
 
 - A version is named `criteria-v<n>`, with `n` counted from 1.
 - Any change to the wording shown to the grader makes a new version: a dimension, the scale, the meaning of a score, an instruction. A typo fix that changes no meaning does too; the identifier is cheap and the doubt is not.
 - A version's text is added to this file, under its own heading, **before** the first grade is given under it.
-- A later grading reuses the newest version when its wording is unchanged, and names it. Otherwise it writes the next version here before grading starts. Phase 07's human grading ([#215](https://github.com/sebelapetr/sebela.dev/issues/215), [#216](https://github.com/sebelapetr/sebela.dev/issues/216)) therefore either grades under `criteria-v1`, with both texts shown to the grader unchanged, or writes `criteria-v2` first.
+- A later grading reuses the newest version when its wording is unchanged, and names it. Otherwise it writes the next version here before grading starts. Phase 07's human grading ([#216](https://github.com/sebelapetr/sebela.dev/issues/216)) therefore either grades under `criteria-v1`, with both texts shown to the grader unchanged, or writes `criteria-v2` first. Production grading of real answers is outside phase 7 ([#448](https://github.com/sebelapetr/sebela.dev/issues/448)); the Langfuse annotation queue is an untracked follow-up, not part of #448.
 - A version that has been used is never edited or removed. A correction is a new version.
 - Grades given under different versions are not pooled or compared as one series without saying so.
 

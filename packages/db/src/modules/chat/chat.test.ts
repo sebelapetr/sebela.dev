@@ -1,0 +1,1882 @@
+import { randomUUID } from "node:crypto";
+
+import { sql, type SQL } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { readDatabaseConfig } from "../../config.js";
+import { openConnection, type Connection } from "../../connection.js";
+import { createTemporaryDatabase, type TemporaryDatabase } from "../../testing.js";
+import {
+  chatPruneBatch,
+  createChatPersistence,
+  type ChatAdmissionInput,
+  type ChatClearInput,
+  type ChatCompactionAdmissionInput,
+  type ChatCompactionRecord,
+  type ChatRequestClaimInput,
+  type ChatRetryInput,
+  type ChatIdentityRecord,
+  type ChatPersistence,
+  type ChatResultRecord,
+  type ChatUsageInput,
+  type ChatUsageRecord,
+} from "./index.js";
+
+// Fictional values only; verifiers and hashes stand in for the services' one-way digests.
+const allowance = 20_000;
+const roomy = 1_000_000_000;
+const timeout = { code: "timeout", retryable: true };
+
+let counter = 0;
+const unique = (prefix: string) => `${prefix}-${String(++counter)}-${randomUUID()}`;
+
+describe("chat persistence", () => {
+  let database: TemporaryDatabase;
+  let connection: Connection;
+  let chat: ChatPersistence;
+
+  beforeAll(async () => {
+    database = await createTemporaryDatabase(readDatabaseConfig(process.env));
+    connection = openConnection(database.config);
+    chat = createChatPersistence(connection.db);
+  });
+
+  afterAll(async () => {
+    await connection.close();
+    await database.drop();
+  });
+
+  const at = new Date("2026-11-22T10:00:00.000Z");
+  const later = (ms: number, from = at) => new Date(from.getTime() + ms);
+
+  const identity = () => chat.createIdentity(unique("verifier"), at);
+
+  const admission = (
+    caller: ChatIdentityRecord,
+    overrides: Partial<ChatAdmissionInput> = {},
+  ): ChatAdmissionInput => {
+    const when = overrides.at ?? at;
+    return {
+      identityId: caller.identityId,
+      conversationId: caller.conversation.id,
+      requestId: randomUUID(),
+      question: "What does Alex build?",
+      questionHash: "question-hash",
+      challengeTokenHash: unique("token"),
+      fingerprint: unique("fingerprint"),
+      at: when,
+      deadlineAt: later(60_000, when),
+      grantVerifier: "grant-verifier",
+      model: "fake",
+      effort: "medium",
+      pricingVersion: "2026-11",
+      allowanceMicroUsd: allowance,
+      quotas: [],
+      admissionExpiresAt: later(86_400_000, when),
+      spend: [
+        {
+          kind: "day",
+          startsOn: "2030-01-01",
+          limitMicroUsd: roomy,
+        },
+      ],
+      ...overrides,
+    };
+  };
+
+  const admitted = async (input: ChatAdmissionInput) => {
+    const result = await chat.admit(input);
+    if (result.status !== "admitted")
+      throw new Error(`Expected an admission, got ${result.status}`);
+    return result.operation;
+  };
+
+  const answered = (overrides: Partial<ChatResultRecord> = {}): ChatResultRecord => ({
+    status: "completed",
+    outcome: "answered",
+    errorCode: null,
+    errorRetryable: null,
+    text: "Alex builds data platforms.",
+    language: "en",
+    blocks: [],
+    sources: [{ record: { kind: "person", id: "alex" }, title: "Alex", href: "/" }],
+    related: [],
+    resultOutcome: "answered",
+    resultReason: null,
+    costMicroUsd: 4_000,
+    inputTokens: 1_000,
+    outputTokens: 100,
+    modelAttempts: 3,
+    latencyMs: 4_000,
+    versions: { prompt: "chat-v1" },
+    context: null,
+    advancesRevision: true,
+    ...overrides,
+  });
+
+  /** Claims and reconciles an operation so its identity is free again. */
+  const finish = async (operationId: string, result = answered()) => {
+    const claim = await chat.claimGrant(operationId, "grant-verifier", at);
+    expect(claim.status).toBe("claimed");
+    const reconciled = await chat.reconcile(operationId, "grant-verifier", at, result);
+    expect(reconciled.status).toBe("reconciled");
+  };
+
+  describe("identities and conversations", () => {
+    it("resolves an identity by its verifier with its single conversation", async () => {
+      const created = await chat.createIdentity("verifier-known", at);
+      const resolved = await chat.resolveIdentity("verifier-known", later(1000));
+      expect(resolved).toEqual({
+        identityId: created.identityId,
+        conversation: { ...created.conversation, lastActivityAt: expect.any(Date) as Date },
+      });
+      await expect(chat.resolveIdentity("verifier-unknown", at)).resolves.toBeNull();
+    });
+
+    it("enforces one conversation per identity in the database", async () => {
+      const caller = await identity();
+      await expect(
+        connection.db.execute(
+          sql`INSERT INTO chat.conversations (identity_id, created_at, last_activity_at) VALUES (${caller.identityId}, now(), now())`,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("stores no client address, cookie value, grant or challenge token", async () => {
+      const result = await connection.db.execute<{ column_name: string } & Record<string, unknown>>(
+        sql`SELECT column_name FROM information_schema.columns WHERE table_schema = 'chat'`,
+      );
+      const names = result.rows.map((row) => row.column_name);
+      expect(names.length).toBeGreaterThan(0);
+      for (const name of names) {
+        expect(name).not.toMatch(/(^|_)(ip|address|cookie|grant|token|secret)($|_)/);
+      }
+    });
+  });
+
+  describe("admission", () => {
+    it("appends the question and a pending answer and creates an accepted operation", async () => {
+      const caller = await identity();
+      const operation = await admitted(admission(caller, { question: "Who is Alex?" }));
+      expect(operation.status).toBe("accepted");
+      expect(operation.contextRevision).toBe(0);
+      const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+      expect(page.hasMore).toBe(false);
+      expect(page.messages.map((message) => [message.role, message.status, message.text])).toEqual([
+        ["user", "completed", "Who is Alex?"],
+        ["assistant", "pending", null],
+      ]);
+      expect(page.messages[1]?.id).toBe(operation.assistantMessageId);
+      await expect(chat.findActiveOperation(caller.identityId)).resolves.toEqual(operation);
+    });
+
+    it("recovers a repeated request instead of appending it again", async () => {
+      const caller = await identity();
+      const input = admission(caller);
+      const first = await admitted(input);
+      const again = await chat.admit({ ...input, challengeTokenHash: unique("token") });
+      expect(again).toEqual({ status: "duplicate", operation: first, sameQuestion: true });
+      const conflicting = await chat.admit({
+        ...input,
+        questionHash: "other-question",
+        challengeTokenHash: unique("token"),
+      });
+      expect(conflicting).toEqual({ status: "duplicate", operation: first, sameQuestion: false });
+      const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+      expect(page.messages).toHaveLength(2);
+    });
+
+    it("admits one of many concurrent duplicate submissions", async () => {
+      const caller = await identity();
+      const input = admission(caller);
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          chat.admit({ ...input, challengeTokenHash: unique("token") }),
+        ),
+      );
+      expect(results.filter((result) => result.status === "admitted")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "duplicate")).toHaveLength(5);
+      const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+      expect(page.messages).toHaveLength(2);
+    });
+
+    it("keeps one active operation per identity under concurrent different requests", async () => {
+      const caller = await identity();
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () => chat.admit(admission(caller))),
+      );
+      expect(results.filter((result) => result.status === "admitted")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "busy")).toHaveLength(5);
+    });
+
+    it("refuses a challenge token that already admitted a question", async () => {
+      const token = unique("token");
+      await admitted(admission(await identity(), { challengeTokenHash: token }));
+      const second = await identity();
+      await expect(chat.admit(admission(second, { challengeTokenHash: token }))).resolves.toEqual({
+        status: "challenge_reused",
+      });
+      await expect(chat.findActiveOperation(second.identityId)).resolves.toBeNull();
+    });
+
+    it("refuses an identity over its rolling quota and says when the oldest admission ages out", async () => {
+      const caller = await identity();
+      const quotas = (when: Date) => [
+        { scope: "identity" as const, since: later(-60_000, when), limit: 2, resetsAt: null },
+      ];
+      const first = await admitted(admission(caller, { quotas: quotas(at) }));
+      await finish(first.id);
+      const second = await admitted(
+        admission(caller, { at: later(10_000), quotas: quotas(later(10_000)) }),
+      );
+      await finish(second.id);
+      const third = await chat.admit(
+        admission(caller, { at: later(20_000), quotas: quotas(later(20_000)) }),
+      );
+      expect(third).toEqual({
+        status: "quota_exceeded",
+        scope: "identity",
+        retryAt: later(60_000),
+      });
+    });
+
+    it("counts the fingerprint across identities and reports a fixed window's reset", async () => {
+      const fingerprint = unique("fingerprint");
+      const resetsAt = new Date("2026-11-23T00:00:00.000Z");
+      const quotas = [
+        {
+          scope: "fingerprint" as const,
+          since: new Date("2026-11-22T00:00:00.000Z"),
+          limit: 1,
+          resetsAt,
+        },
+      ];
+      await admitted(admission(await identity(), { fingerprint, quotas }));
+      await expect(
+        chat.admit(admission(await identity(), { fingerprint, quotas })),
+      ).resolves.toEqual({ status: "quota_exceeded", scope: "fingerprint", retryAt: resetsAt });
+    });
+
+    it("reserves the allowance in every window and refuses without storing anything", async () => {
+      const day = "2031-03-31";
+      const nextDay = "2031-04-01";
+      const spend = [
+        { kind: "day" as const, startsOn: day, limitMicroUsd: 30_000 },
+        { kind: "day" as const, startsOn: nextDay, limitMicroUsd: 30_000 },
+      ];
+      await admitted(admission(await identity(), { spend }));
+      expect(await chat.committedSpend("day", day)).toBe(allowance);
+      expect(await chat.committedSpend("day", nextDay)).toBe(allowance);
+
+      const refused = await identity();
+      const token = unique("token");
+      await expect(
+        chat.admit(admission(refused, { spend, challengeTokenHash: token })),
+      ).resolves.toEqual({ status: "budget_exhausted" });
+      expect(await chat.committedSpend("day", day)).toBe(allowance);
+      expect(await chat.committedSpend("day", nextDay)).toBe(allowance);
+      const page = await chat.listMessages(refused.conversation.id, { limit: 20 });
+      expect(page.messages).toEqual([]);
+      // The token was not bound, so a later admission may still redeem it.
+      await admitted(admission(refused, { challengeTokenHash: token }));
+    });
+
+    it("never reserves more than a window's limit under concurrent admissions", async () => {
+      const startsOn = "2032-05-01";
+      const spend = [{ kind: "month" as const, startsOn, limitMicroUsd: 3 * allowance }];
+      const callers = await Promise.all(Array.from({ length: 8 }, () => identity()));
+      const results = await Promise.all(
+        callers.map((caller) => chat.admit(admission(caller, { spend }))),
+      );
+      expect(results.filter((result) => result.status === "admitted")).toHaveLength(3);
+      expect(await chat.committedSpend("month", startsOn)).toBe(3 * allowance);
+    });
+  });
+
+  describe("grants", () => {
+    it("claims a grant once and moves the operation to running", async () => {
+      const operation = await admitted(admission(await identity()));
+      const claim = await chat.claimGrant(operation.id, "grant-verifier", later(1000));
+      expect(claim).toEqual({ status: "claimed", operation: { ...operation, status: "running" } });
+      await expect(chat.claimGrant(operation.id, "grant-verifier", later(2000))).resolves.toEqual({
+        status: "refused",
+      });
+    });
+
+    it("refuses another grant and an unknown operation without claiming", async () => {
+      const operation = await admitted(admission(await identity()));
+      await expect(chat.claimGrant(operation.id, "other-verifier", at)).resolves.toEqual({
+        status: "wrong_grant",
+      });
+      await expect(chat.claimGrant(randomUUID(), "grant-verifier", at)).resolves.toEqual({
+        status: "wrong_grant",
+      });
+      expect((await chat.claimGrant(operation.id, "grant-verifier", at)).status).toBe("claimed");
+    });
+
+    it("refuses an expired grant", async () => {
+      const operation = await admitted(admission(await identity()));
+      await expect(chat.claimGrant(operation.id, "grant-verifier", later(60_000))).resolves.toEqual(
+        { status: "refused" },
+      );
+    });
+
+    it("claims once under concurrent claims", async () => {
+      const operation = await admitted(admission(await identity()));
+      const claims = await Promise.all(
+        Array.from({ length: 6 }, () => chat.claimGrant(operation.id, "grant-verifier", at)),
+      );
+      expect(claims.filter((claim) => claim.status === "claimed")).toHaveLength(1);
+    });
+  });
+
+  describe("reconciling", () => {
+    it("stores the answer once, completes the operation and settles the known cost", async () => {
+      const startsOn = "2033-01-01";
+      const caller = await identity();
+      const operation = await admitted(
+        admission(caller, { spend: [{ kind: "day", startsOn, limitMicroUsd: roomy }] }),
+      );
+      await chat.claimGrant(operation.id, "grant-verifier", at);
+      const result = await chat.reconcile(operation.id, "grant-verifier", later(5000), answered());
+      expect(result).toEqual({
+        status: "reconciled",
+        operation: { ...operation, status: "completed" },
+      });
+      expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+
+      const repeat = await chat.reconcile(
+        operation.id,
+        "grant-verifier",
+        later(6000),
+        answered({ text: "A different answer.", costMicroUsd: 9_000 }),
+      );
+      expect(repeat).toEqual({
+        status: "already",
+        operation: { ...operation, status: "completed" },
+      });
+      expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+
+      const found = await chat.findOperation(caller.identityId, operation.id);
+      expect(found?.assistant).toMatchObject({
+        status: "completed",
+        outcome: "answered",
+        text: "Alex builds data platforms.",
+        language: "en",
+      });
+      const resolved = await chat.resolveIdentity(
+        (
+          await connection.db.execute<{ verifier: string } & Record<string, unknown>>(
+            sql`SELECT verifier FROM chat.identities WHERE id = ${caller.identityId}`,
+          )
+        ).rows[0]?.verifier ?? "",
+        later(7000),
+      );
+      expect(resolved?.conversation.revision).toBe(1);
+    });
+
+    it("keeps the full reservation when the cost is uncertain", async () => {
+      const startsOn = "2033-02-01";
+      const operation = await admitted(
+        admission(await identity(), { spend: [{ kind: "day", startsOn, limitMicroUsd: roomy }] }),
+      );
+      await chat.claimGrant(operation.id, "grant-verifier", at);
+      await chat.reconcile(operation.id, "grant-verifier", at, answered({ costMicroUsd: null }));
+      expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+    });
+
+    it("refuses another grant and an unclaimed operation", async () => {
+      const operation = await admitted(admission(await identity()));
+      await expect(chat.reconcile(operation.id, "grant-verifier", at, answered())).resolves.toEqual(
+        { status: "not_claimed" },
+      );
+      await chat.claimGrant(operation.id, "grant-verifier", at);
+      await expect(chat.reconcile(operation.id, "other", at, answered())).resolves.toEqual({
+        status: "wrong_grant",
+      });
+    });
+
+    it("stores a failure without text and frees the identity", async () => {
+      const caller = await identity();
+      const operation = await admitted(admission(caller));
+      await chat.claimGrant(operation.id, "grant-verifier", at);
+      await chat.reconcile(
+        operation.id,
+        "grant-verifier",
+        at,
+        answered({
+          status: "failed",
+          outcome: null,
+          errorCode: "timeout",
+          errorRetryable: true,
+          text: null,
+          sources: [],
+          resultOutcome: "limit_reached",
+          resultReason: "deadline",
+          advancesRevision: false,
+        }),
+      );
+      const found = await chat.findOperation(caller.identityId, operation.id);
+      expect(found?.operation.status).toBe("failed");
+      expect(found?.assistant).toMatchObject({
+        status: "failed",
+        text: null,
+        errorCode: "timeout",
+      });
+      await expect(chat.findActiveOperation(caller.identityId)).resolves.toBeNull();
+    });
+  });
+
+  describe("failing and interrupting", () => {
+    it("fails an unclaimed operation and releases its reservation", async () => {
+      const startsOn = "2034-01-01";
+      const caller = await identity();
+      const operation = await admitted(
+        admission(caller, { spend: [{ kind: "day", startsOn, limitMicroUsd: roomy }] }),
+      );
+      await expect(
+        chat.failUnclaimed(operation.id, at, { code: "busy", retryable: true }),
+      ).resolves.toBe(true);
+      expect(await chat.committedSpend("day", startsOn)).toBe(0);
+      const found = await chat.findOperation(caller.identityId, operation.id);
+      expect(found?.assistant).toMatchObject({ status: "failed", errorCode: "busy" });
+      await expect(chat.failUnclaimed(operation.id, at, timeout)).resolves.toBe(false);
+    });
+
+    it("does not fail a claimed operation", async () => {
+      const operation = await admitted(admission(await identity()));
+      await chat.claimGrant(operation.id, "grant-verifier", at);
+      await expect(chat.failUnclaimed(operation.id, at, timeout)).resolves.toBe(false);
+    });
+
+    it("interrupts overdue operations, keeping a claimed one's spend as uncertain", async () => {
+      const startsOn = "2035-01-01";
+      const spend = [{ kind: "day" as const, startsOn, limitMicroUsd: roomy }];
+      const when = new Date("2035-01-01T08:00:00.000Z");
+      const claimedCaller = await identity();
+      const claimed = await admitted(admission(claimedCaller, { spend, at: when }));
+      await chat.claimGrant(claimed.id, "grant-verifier", when);
+      const unclaimed = await admitted(admission(await identity(), { spend, at: when }));
+
+      const interrupted = await chat.interruptOverdue(
+        later(70_000, when),
+        later(70_000, when),
+        timeout,
+      );
+      // Operations other tests left active are overdue too.
+      expect(interrupted).toEqual(expect.arrayContaining([claimed.id, unclaimed.id]));
+      expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+      const found = await chat.findOperation(claimedCaller.identityId, claimed.id);
+      expect(found?.operation.status).toBe("interrupted");
+      expect(found?.assistant).toMatchObject({
+        status: "interrupted",
+        text: null,
+        errorCode: "timeout",
+        errorRetryable: true,
+      });
+      await expect(chat.reconcile(claimed.id, "grant-verifier", when, answered())).resolves.toEqual(
+        {
+          status: "already",
+          operation: { ...claimed, status: "interrupted" },
+        },
+      );
+    });
+  });
+
+  describe("reads", () => {
+    it("pages a conversation and gives an empty page for a cursor from elsewhere", async () => {
+      const caller = await identity();
+      for (let index = 0; index < 3; index += 1) {
+        const operation = await admitted(
+          admission(caller, { question: `Question ${String(index)}` }),
+        );
+        await finish(operation.id);
+      }
+      const newest = await chat.listMessages(caller.conversation.id, { limit: 4 });
+      expect(newest.hasMore).toBe(true);
+      expect(newest.messages.map((message) => message.text)).toEqual([
+        "Question 1",
+        "Alex builds data platforms.",
+        "Question 2",
+        "Alex builds data platforms.",
+      ]);
+      const older = await chat.listMessages(caller.conversation.id, {
+        before: newest.messages[0]?.id ?? "",
+        limit: 4,
+      });
+      expect(older.hasMore).toBe(false);
+      expect(older.messages.map((message) => message.text)).toEqual([
+        "Question 0",
+        "Alex builds data platforms.",
+      ]);
+
+      const other = await identity();
+      await expect(
+        chat.listMessages(other.conversation.id, {
+          before: newest.messages[0]?.id ?? "",
+          limit: 4,
+        }),
+      ).resolves.toEqual({ messages: [], hasMore: false });
+    });
+
+    it("never finds another identity's operation", async () => {
+      const operation = await admitted(admission(await identity()));
+      const stranger = await identity();
+      await expect(chat.findOperation(stranger.identityId, operation.id)).resolves.toBeNull();
+      await expect(
+        chat.findOperationByRequest(stranger.identityId, operation.requestId),
+      ).resolves.toBeNull();
+    });
+
+    it("gives at most the latest completed answered exchanges, oldest first, as the working context", async () => {
+      const caller = await identity();
+      for (let index = 0; index < 3; index += 1) {
+        const operation = await admitted(
+          admission(caller, { question: `Question ${String(index)}` }),
+        );
+        await finish(operation.id, answered({ text: `Answer ${String(index)}` }));
+      }
+      const refused = await admitted(admission(caller, { question: "Refused" }));
+      await finish(
+        refused.id,
+        answered({ outcome: "refused", text: "No.", advancesRevision: false }),
+      );
+      await expect(chat.workingContext(caller.conversation.id, 2)).resolves.toEqual({
+        revision: 3,
+        summary: null,
+        exchanges: [
+          {
+            question: "Question 1",
+            answer: "Answer 1",
+            language: "en",
+            sources: answered().sources,
+          },
+          {
+            question: "Question 2",
+            answer: "Answer 2",
+            language: "en",
+            sources: answered().sources,
+          },
+        ],
+      });
+    });
+  });
+
+  describe("request claims", () => {
+    const claimInput = (
+      caller: ChatIdentityRecord,
+      overrides: Partial<ChatRequestClaimInput> = {},
+    ) =>
+      ({
+        identityId: caller.identityId,
+        requestId: randomUUID(),
+        questionHash: "question-hash",
+        challengeTokenHash: unique("token"),
+        at,
+        expiresAt: later(15_000),
+        ...overrides,
+      }) satisfies ChatRequestClaimInput;
+
+    it("grants one of many concurrent equal claims; the others see it pending", async () => {
+      const input = claimInput(await identity());
+      const results = await Promise.all(Array.from({ length: 8 }, () => chat.claimRequest(input)));
+      expect(results.filter((result) => result.status === "claimed")).toHaveLength(1);
+      const held = results.filter((result) => result.status === "held");
+      expect(held).toHaveLength(7);
+      for (const result of held) {
+        expect(result).toEqual({
+          status: "held",
+          state: "pending",
+          sameQuestion: true,
+          sameToken: true,
+        });
+      }
+    });
+
+    it("tells another question and another token apart while the claim holds", async () => {
+      const input = claimInput(await identity());
+      await expect(chat.claimRequest(input)).resolves.toEqual({ status: "claimed" });
+      await expect(
+        chat.claimRequest({ ...input, questionHash: "other-question", at: later(1000) }),
+      ).resolves.toEqual({
+        status: "held",
+        state: "pending",
+        sameQuestion: false,
+        sameToken: true,
+      });
+      await expect(
+        chat.claimRequest({ ...input, challengeTokenHash: unique("token"), at: later(1000) }),
+      ).resolves.toEqual({
+        status: "held",
+        state: "pending",
+        sameQuestion: true,
+        sameToken: false,
+      });
+    });
+
+    it("records how the holder's verification ended, once", async () => {
+      const caller = await identity();
+      const failed = claimInput(caller);
+      await chat.claimRequest(failed);
+      await chat.settleRequestClaim(failed, "failed");
+      await chat.settleRequestClaim(failed, "verified");
+      await expect(chat.claimRequest({ ...failed, at: later(1000) })).resolves.toMatchObject({
+        status: "held",
+        state: "failed",
+      });
+      const verified = claimInput(caller);
+      await chat.claimRequest(verified);
+      await chat.settleRequestClaim(verified, "verified");
+      await expect(chat.claimRequest({ ...verified, at: later(1000) })).resolves.toMatchObject({
+        status: "held",
+        state: "verified",
+      });
+    });
+
+    it("lets an expired claim be taken over, by one claimant only", async () => {
+      const input = claimInput(await identity(), { expiresAt: later(1000) });
+      await chat.claimRequest(input);
+      const takeover = { ...input, at: later(2000), expiresAt: later(17_000) };
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () => chat.claimRequest(takeover)),
+      );
+      expect(results.filter((result) => result.status === "claimed")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "held")).toHaveLength(5);
+    });
+  });
+
+  describe("pruning on admission", () => {
+    const expiredRows = async (table: "admissions" | "request_claims", when: Date) => {
+      const result = await connection.db.execute<{ count: string } & Record<string, unknown>>(
+        sql`SELECT count(*)::text AS count FROM ${sql.identifier("chat")}.${sql.identifier(table)} WHERE expires_at < ${when.toISOString()}::timestamptz`,
+      );
+      return Number(result.rows[0]?.count);
+    };
+
+    it("deletes a bounded batch of expired admissions and request claims", async () => {
+      const when = new Date("2040-01-01T10:00:00.000Z");
+      const past = new Date("2039-12-01T10:00:00.000Z");
+      const owner = await identity();
+      await connection.db.execute(
+        sql`INSERT INTO chat.admissions (identity_id, fingerprint, admitted_at, expires_at)
+            SELECT ${owner.identityId}::uuid, 'fingerprint-old', ${past.toISOString()}::timestamptz, ${past.toISOString()}::timestamptz
+            FROM generate_series(1, ${chatPruneBatch + 10})`,
+      );
+      await connection.db.execute(
+        sql`INSERT INTO chat.request_claims (identity_id, request_id, question_hash, challenge_digest, state, claimed_at, expires_at)
+            SELECT ${owner.identityId}::uuid, gen_random_uuid(), 'question-hash', 'digest-' || n, 'pending', ${past.toISOString()}::timestamptz, ${past.toISOString()}::timestamptz
+            FROM generate_series(1, ${chatPruneBatch + 10}) AS n`,
+      );
+      const admissionsBefore = await expiredRows("admissions", when);
+      const claimsBefore = await expiredRows("request_claims", when);
+
+      await admitted(
+        admission(await identity(), {
+          at: when,
+          deadlineAt: later(60_000, when),
+          admissionExpiresAt: later(86_400_000, when),
+        }),
+      );
+
+      expect(await expiredRows("admissions", when)).toBe(admissionsBefore - chatPruneBatch);
+      expect(await expiredRows("request_claims", when)).toBe(claimsBefore - chatPruneBatch);
+    });
+  });
+
+  describe("retention", () => {
+    it("deletes inactive identities with their conversations and keeps the accounting", async () => {
+      const startsOn = "2036-01-01";
+      const old = new Date("2036-01-01T09:00:00.000Z");
+      const verifier = unique("verifier");
+      const inactive = await chat.createIdentity(verifier, old);
+      const operation = await admitted(
+        admission(inactive, {
+          at: old,
+          admissionExpiresAt: later(1000, old),
+          spend: [{ kind: "day", startsOn, limitMicroUsd: roomy }],
+        }),
+      );
+      await chat.claimGrant(operation.id, "grant-verifier", old);
+      await chat.reconcile(operation.id, "grant-verifier", old, answered());
+      const active = await chat.createIdentity(unique("verifier"), later(10 * 86_400_000, old));
+
+      const deleted = await chat.deleteInactive(
+        later(86_400_000, old),
+        later(86_400_000, old),
+        100,
+      );
+      expect(deleted).toBeGreaterThanOrEqual(1);
+      await expect(chat.resolveIdentity(verifier, later(86_400_000, old))).resolves.toBeNull();
+      await expect(chat.listMessages(inactive.conversation.id, { limit: 20 })).resolves.toEqual({
+        messages: [],
+        hasMore: false,
+      });
+      expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+      const remaining = await connection.db.execute<{ count: string } & Record<string, unknown>>(
+        sql`SELECT count(*)::text AS count FROM chat.identities WHERE id = ${active.identityId}`,
+      );
+      expect(remaining.rows[0]?.count).toBe("1");
+      const runs = await connection.db.execute<{ count: string } & Record<string, unknown>>(
+        sql`SELECT count(*)::text AS count FROM chat.deletions`,
+      );
+      expect(Number(runs.rows[0]?.count)).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("usage and limits", () => {
+    const minute = 60_000;
+    const rolling = (scope: "identity" | "fingerprint", when: Date, ms: number, limit: number) => ({
+      scope,
+      since: later(-ms, when),
+      limit,
+      resetsAt: null,
+    });
+    const usageOf = (
+      caller: ChatIdentityRecord,
+      overrides: Partial<ChatUsageInput> = {},
+    ): Promise<ChatUsageRecord> =>
+      chat.usage({
+        identityId: caller.identityId,
+        conversationId: caller.conversation.id,
+        fingerprint: unique("fingerprint"),
+        at,
+        quotas: [],
+        spend: [],
+        allowanceMicroUsd: allowance,
+        ...overrides,
+      });
+    const paidFailure = answered({
+      status: "failed",
+      outcome: null,
+      errorCode: "unavailable",
+      errorRetryable: true,
+      text: null,
+      sources: [],
+      resultOutcome: "provider_error",
+      resultReason: null,
+      costMicroUsd: 1_000,
+      modelAttempts: 1,
+      advancesRevision: false,
+    });
+    const noWork = answered({ ...paidFailure, costMicroUsd: 0, modelAttempts: 0 });
+
+    it("counts a rolling window after its start and a fixed one from its start, exactly", async () => {
+      const caller = await identity();
+      for (const offset of [0, 10_000, 20_000]) {
+        const operation = await admitted(admission(caller, { at: later(offset) }));
+        await finish(operation.id);
+      }
+      // A minute after the first admission it has aged out: `since` itself is outside the window.
+      const aged = await usageOf(caller, {
+        at: later(minute),
+        quotas: [rolling("identity", later(minute), minute, 3)],
+      });
+      expect(aged.quotas).toEqual([
+        { used: 2, retryAt: null, nextReleaseAt: later(minute + 10_000) },
+      ]);
+      // A millisecond earlier all three count, the quota is full and has room again at the minute.
+      const full = await usageOf(caller, {
+        at: later(minute - 1),
+        quotas: [rolling("identity", later(minute - 1), minute, 3)],
+      });
+      expect(full.quotas).toEqual([
+        { used: 3, retryAt: later(minute), nextReleaseAt: later(minute) },
+      ]);
+      // A fixed window counts an admission at its very start and frees everything at its reset.
+      const resetsAt = later(3_600_000);
+      const fixed = await usageOf(caller, {
+        at: later(30_000),
+        quotas: [{ scope: "identity", since: at, limit: 3, resetsAt }],
+      });
+      expect(fixed.quotas).toEqual([{ used: 3, retryAt: resetsAt, nextReleaseAt: resetsAt }]);
+      const empty = await usageOf(await identity(), {
+        quotas: [{ scope: "identity", since: at, limit: 3, resetsAt }],
+      });
+      expect(empty.quotas).toEqual([{ used: 0, retryAt: null, nextReleaseAt: null }]);
+    });
+
+    it("counts a shared fingerprint across identities without counting them as the caller's", async () => {
+      const fingerprint = unique("fingerprint");
+      const neighbour = await identity();
+      const first = await admitted(admission(neighbour, { fingerprint }));
+      await finish(first.id);
+      const caller = await identity();
+      const own = await admitted(admission(caller, { fingerprint, at: later(1000) }));
+      await finish(own.id);
+      const usage = await usageOf(caller, {
+        fingerprint,
+        at: later(2000),
+        quotas: [
+          rolling("identity", later(2000), minute, 5),
+          rolling("fingerprint", later(2000), minute, 2),
+        ],
+      });
+      expect(usage.quotas).toEqual([
+        { used: 1, retryAt: null, nextReleaseAt: later(minute + 1000) },
+        { used: 2, retryAt: later(minute), nextReleaseAt: later(minute) },
+      ]);
+    });
+
+    it("admits exactly a shared fingerprint's rolling minute limit under concurrent identities", async () => {
+      const fingerprint = unique("fingerprint");
+      const callers = await Promise.all(Array.from({ length: 25 }, () => identity()));
+      const quotas = [rolling("fingerprint", at, minute, 20)];
+      const results = await Promise.all(
+        callers.map((caller) => chat.admit(admission(caller, { fingerprint, quotas }))),
+      );
+      expect(results.filter((result) => result.status === "admitted")).toHaveLength(20);
+      const refused = results.filter((result) => result.status !== "admitted");
+      expect(refused).toEqual(
+        Array.from({ length: 5 }, () => ({
+          status: "quota_exceeded",
+          scope: "fingerprint",
+          retryAt: later(minute),
+        })),
+      );
+      const usage = await usageOf(await identity(), { fingerprint, quotas });
+      expect(usage.quotas).toEqual([
+        { used: 20, retryAt: later(minute), nextReleaseAt: later(minute) },
+      ]);
+    });
+
+    it("admits exactly a shared fingerprint's UTC-day limit under concurrent identities", async () => {
+      const fingerprint = unique("fingerprint");
+      const since = new Date("2026-11-22T00:00:00.000Z");
+      const resetsAt = new Date("2026-11-23T00:00:00.000Z");
+      const quotas = [{ scope: "fingerprint" as const, since, limit: 100, resetsAt }];
+      // Ninety admissions earlier in the day, spread so that no minute window is involved.
+      const earlier = await Promise.all(Array.from({ length: 90 }, () => identity()));
+      await Promise.all(
+        earlier.map((caller, index) =>
+          admitted(admission(caller, { fingerprint, at: later(-(index + 1) * minute) })),
+        ),
+      );
+      const callers = await Promise.all(Array.from({ length: 15 }, () => identity()));
+      const results = await Promise.all(
+        callers.map((caller) => chat.admit(admission(caller, { fingerprint, quotas }))),
+      );
+      expect(results.filter((result) => result.status === "admitted")).toHaveLength(10);
+      expect(results.filter((result) => result.status !== "admitted")).toEqual(
+        Array.from({ length: 5 }, () => ({
+          status: "quota_exceeded",
+          scope: "fingerprint",
+          retryAt: resetsAt,
+        })),
+      );
+    });
+
+    it("tells whether another allowance fits each spend window without exposing its balance", async () => {
+      const spend = [
+        { kind: "day" as const, startsOn: "2036-02-28", limitMicroUsd: 2 * allowance },
+        { kind: "month" as const, startsOn: "2036-02-01", limitMicroUsd: roomy },
+      ];
+      const caller = await identity();
+      await admitted(admission(caller, { spend }));
+      const other = await identity();
+      await expect(usageOf(other, { spend })).resolves.toMatchObject({ spendRoom: [true, true] });
+      await admitted(admission(other, { spend }));
+      await expect(usageOf(await identity(), { spend })).resolves.toMatchObject({
+        spendRoom: [false, true],
+      });
+    });
+
+    it("reports the active operation and the conversation's last measured main call", async () => {
+      const caller = await identity();
+      await expect(usageOf(caller)).resolves.toEqual({
+        quotas: [],
+        spendRoom: [],
+        activeOperation: null,
+        context: null,
+        nextRequest: null,
+      });
+      const measured = await admitted(admission(caller));
+      const context = {
+        estimatedInputTokens: 6_400,
+        reportedInputTokens: 6_512,
+        capTokens: 16_000,
+      };
+      await chat.claimGrant(measured.id, "grant-verifier", at);
+      await chat.reconcile(measured.id, "grant-verifier", later(5000), answered({ context }));
+      const unmeasured = await admitted(admission(caller, { at: later(6000) }));
+      await finish(unmeasured.id, answered({ context: null }));
+      const active = await admitted(admission(caller, { at: later(7000) }));
+
+      const usage = await usageOf(caller, { at: later(8000) });
+      expect(usage.activeOperation).toEqual(active);
+      expect(usage.context).toEqual({
+        operationId: measured.id,
+        measuredAt: later(5000),
+        ...context,
+      });
+
+      // Another identity sees nothing of it; a cleared conversation has no measurement.
+      await expect(usageOf(await identity())).resolves.toMatchObject({
+        activeOperation: null,
+        context: null,
+      });
+      const cleared = await chat.clear({
+        identityId: caller.identityId,
+        conversationId: caller.conversation.id,
+        at: later(9000),
+        error: { code: "cancelled", retryable: true },
+        tombstoneExpiresAt: later(86_400_000),
+      });
+      if (cleared.status !== "cleared") throw new Error("Expected the conversation to clear.");
+      await expect(
+        usageOf({ ...caller, conversation: cleared.conversation }, { at: later(10_000) }),
+      ).resolves.toMatchObject({ activeOperation: null, context: null });
+    });
+
+    it("reads without consuming anything", async () => {
+      const caller = await identity();
+      const quotas = [rolling("identity", later(1000), minute, 1)];
+      const before = await usageOf(caller, { at: later(1000), quotas });
+      await usageOf(caller, { at: later(1000), quotas });
+      expect(before.quotas).toEqual([{ used: 0, retryAt: null, nextReleaseAt: null }]);
+      await admitted(admission(caller, { at: later(1000), quotas }));
+    });
+
+    it("gives back the admission of work that never started and counts paid or refused work", async () => {
+      const quotas = (when: Date) => [rolling("identity", when, 2 * 3_600_000, 10)];
+      const used = async (caller: ChatIdentityRecord) =>
+        (await usageOf(caller, { at: later(3000), quotas: quotas(later(3000)) })).quotas[0]?.used;
+
+      const refusedDispatch = await identity();
+      const dispatched = await admitted(admission(refusedDispatch));
+      await chat.failUnclaimed(dispatched.id, at, { code: "unavailable", retryable: true });
+      expect(await used(refusedDispatch)).toBe(0);
+
+      const notStarted = await identity();
+      const failedEarly = await admitted(admission(notStarted));
+      await finish(failedEarly.id, noWork);
+      expect(await used(notStarted)).toBe(0);
+
+      const paid = await identity();
+      const paidOperation = await admitted(admission(paid));
+      await finish(paidOperation.id, paidFailure);
+      expect(await used(paid)).toBe(1);
+
+      const refused = await identity();
+      const refusal = await admitted(admission(refused));
+      await finish(
+        refusal.id,
+        answered({ outcome: "refused", text: "No.", modelAttempts: 0, costMicroUsd: 0 }),
+      );
+      expect(await used(refused)).toBe(1);
+
+      const stopped = await identity();
+      const stoppedOperation = await admitted(admission(stopped));
+      await chat.stop(stopped.identityId, stoppedOperation.id, at, {
+        code: "cancelled",
+        retryable: true,
+      });
+      expect(await used(stopped)).toBe(1);
+    });
+
+    it("gives back an unclaimed overdue admission and keeps a claimed one counted", async () => {
+      const when = new Date("2037-06-01T08:00:00.000Z");
+      const quotas = [rolling("identity", later(70_000, when), 2 * 3_600_000, 10)];
+      const claimedCaller = await identity();
+      const claimed = await admitted(admission(claimedCaller, { at: when }));
+      await chat.claimGrant(claimed.id, "grant-verifier", when);
+      const unclaimedCaller = await identity();
+      await admitted(admission(unclaimedCaller, { at: when }));
+      await chat.interruptOverdue(later(70_000, when), later(70_000, when), timeout);
+      const read = async (caller: ChatIdentityRecord) =>
+        (await usageOf(caller, { at: later(70_000, when), quotas })).quotas[0]?.used;
+      expect(await read(claimedCaller)).toBe(1);
+      expect(await read(unclaimedCaller)).toBe(0);
+    });
+
+    it("keeps the effort and the model of every answer after the configuration changes", async () => {
+      const caller = await identity();
+      const first = await admitted(admission(caller, { model: "model-a", effort: "low" }));
+      expect(first).toMatchObject({ model: "model-a", effort: "low" });
+      await finish(first.id);
+      const second = await admitted(
+        admission(caller, { model: "model-b", effort: "high", at: later(1000) }),
+      );
+      const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+      expect(page.messages.map((message) => [message.role, message.model, message.effort])).toEqual(
+        [
+          ["user", null, null],
+          ["assistant", "model-a", "low"],
+          ["user", null, null],
+          ["assistant", "model-b", "high"],
+        ],
+      );
+      const found = await chat.findOperation(caller.identityId, second.id);
+      expect(found?.assistant).toMatchObject({ model: "model-b", effort: "high" });
+    });
+
+    it("reserves conservatively across adjacent UTC windows and settles in the admission's once", async () => {
+      const when = new Date("2038-03-31T23:59:30.000Z");
+      const spend = [
+        { kind: "day" as const, startsOn: "2038-03-31", limitMicroUsd: roomy },
+        { kind: "day" as const, startsOn: "2038-04-01", limitMicroUsd: roomy },
+        { kind: "month" as const, startsOn: "2038-03-01", limitMicroUsd: roomy },
+        { kind: "month" as const, startsOn: "2038-04-01", limitMicroUsd: roomy },
+      ];
+      const committed = async () => [
+        await chat.committedSpend("day", "2038-03-31"),
+        await chat.committedSpend("day", "2038-04-01"),
+        await chat.committedSpend("month", "2038-03-01"),
+        await chat.committedSpend("month", "2038-04-01"),
+      ];
+      const caller = await identity();
+      const operation = await admitted(admission(caller, { at: when, spend }));
+      expect(await committed()).toEqual([allowance, allowance, allowance, allowance]);
+      await chat.claimGrant(operation.id, "grant-verifier", when);
+      // Interrupted without a result: the attribution is unknown, so every window keeps it.
+      await chat.interruptOverdue(later(70_000, when), later(70_000, when), timeout);
+      expect(await committed()).toEqual([allowance, allowance, allowance, allowance]);
+      // A late result settles in the admission's day and month, once.
+      await chat.reconcile(operation.id, "grant-verifier", later(80_000, when), answered());
+      await chat.reconcile(
+        operation.id,
+        "grant-verifier",
+        later(90_000, when),
+        answered({ costMicroUsd: 9_000 }),
+      );
+      expect(await committed()).toEqual([4_000, 0, 4_000, 0]);
+    });
+  });
+
+  describe("the conversation lifecycle", () => {
+    const cancelled = { code: "cancelled", retryable: true };
+    const failure = (retryable: boolean) =>
+      answered({
+        status: "failed",
+        outcome: null,
+        errorCode: "unavailable",
+        errorRetryable: retryable,
+        text: null,
+        sources: [],
+        resultOutcome: "provider_error",
+        resultReason: null,
+        costMicroUsd: 1_000,
+        advancesRevision: false,
+      });
+    const onDay = (startsOn: string, limitMicroUsd = roomy) => [
+      { kind: "day" as const, startsOn, limitMicroUsd },
+    ];
+    const retryInput = (
+      caller: ChatIdentityRecord,
+      operationId: string,
+      overrides: Partial<ChatRetryInput> = {},
+    ): ChatRetryInput => {
+      const gates: Partial<ChatAdmissionInput> = { ...admission(caller) };
+      delete gates.requestId;
+      delete gates.question;
+      delete gates.questionHash;
+      return { ...(gates as ChatRetryInput), operationId, retryId: randomUUID(), ...overrides };
+    };
+    /** An admitted, claimed operation that failed with a retryable error. */
+    const failedOnce = async (caller: ChatIdentityRecord, overrides = {}) => {
+      const operation = await admitted(admission(caller, overrides));
+      await finish(operation.id, failure(true));
+      return operation;
+    };
+    const tableCount = async (query: SQL) => {
+      const result = await connection.db.execute<{ count: string } & Record<string, unknown>>(
+        query,
+      );
+      return Number(result.rows[0]?.count);
+    };
+
+    describe("retry", () => {
+      it("retries a failed answer as a new attempt of the same request", async () => {
+        const caller = await identity();
+        const first = await failedOnce(caller);
+        const input = retryInput(caller, first.id);
+        const result = await chat.retry(input);
+        expect(result.status).toBe("admitted");
+        if (result.status !== "admitted") return;
+        const retried = result.operation;
+        expect(retried).toMatchObject({
+          requestId: first.requestId,
+          questionHash: first.questionHash,
+          userMessageId: first.userMessageId,
+          status: "accepted",
+          retryOf: first.id,
+        });
+        expect(retried.id).not.toBe(first.id);
+        expect(retried.assistantMessageId).not.toBe(first.assistantMessageId);
+        const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+        expect(page.messages.map((message) => [message.id, message.status])).toEqual([
+          [first.userMessageId, "completed"],
+          [retried.assistantMessageId, "pending"],
+        ]);
+        await expect(
+          chat.findOperationByRequest(caller.identityId, first.requestId),
+        ).resolves.toEqual(retried);
+        await expect(
+          chat.findOperationByAttempt(caller.identityId, input.retryId),
+        ).resolves.toEqual(retried);
+        await expect(chat.findActiveOperation(caller.identityId)).resolves.toEqual(retried);
+      });
+
+      it("recovers a repeated retry id and conflicts when it names another attempt", async () => {
+        const caller = await identity();
+        const first = await failedOnce(caller);
+        const input = retryInput(caller, first.id);
+        const results = await Promise.all(
+          Array.from({ length: 4 }, () =>
+            chat.retry({ ...input, challengeTokenHash: unique("token") }),
+          ),
+        );
+        const admittedOnes = results.filter((result) => result.status === "admitted");
+        expect(admittedOnes).toHaveLength(1);
+        const retried = admittedOnes[0]?.operation;
+        for (const result of results.filter((entry) => entry.status !== "admitted")) {
+          expect(result).toEqual({ status: "duplicate", operation: retried, sameTarget: true });
+        }
+        await expect(
+          chat.retry({ ...input, operationId: randomUUID(), challengeTokenHash: unique("token") }),
+        ).resolves.toEqual({ status: "duplicate", operation: retried, sameTarget: false });
+        const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+        expect(page.messages).toHaveLength(2);
+      });
+
+      it("recovers an active or completed attempt before any new paid work", async () => {
+        const startsOn = "2042-01-01";
+        const caller = await identity();
+        const first = await failedOnce(caller, { spend: onDay(startsOn) });
+        const retried = await chat.retry(retryInput(caller, first.id, { spend: onDay(startsOn) }));
+        if (retried.status !== "admitted") throw new Error(retried.status);
+        const spent = await chat.committedSpend("day", startsOn);
+        await expect(
+          chat.retry(retryInput(caller, first.id, { spend: onDay(startsOn) })),
+        ).resolves.toEqual({ status: "recovered", operation: retried.operation });
+        await finish(retried.operation.id);
+        const completed = await chat.findOperation(caller.identityId, retried.operation.id);
+        await expect(
+          chat.retry(retryInput(caller, retried.operation.id, { spend: onDay(startsOn) })),
+        ).resolves.toEqual({ status: "recovered", operation: completed?.operation });
+        expect(await chat.committedSpend("day", startsOn)).toBe(spent - allowance + 4_000);
+      });
+
+      it("refuses a non-retryable failure, an older question and another identity's attempt", async () => {
+        const caller = await identity();
+        const final = await admitted(admission(caller));
+        await finish(final.id, failure(false));
+        await expect(chat.retry(retryInput(caller, final.id))).resolves.toEqual({
+          status: "not_retryable",
+        });
+
+        const other = await identity();
+        const older = await failedOnce(other);
+        const newer = await admitted(admission(other));
+        await finish(newer.id);
+        await expect(chat.retry(retryInput(other, older.id))).resolves.toEqual({
+          status: "not_retryable",
+        });
+        await expect(chat.retry(retryInput(caller, older.id))).resolves.toEqual({
+          status: "not_found",
+        });
+      });
+
+      it("rechecks the challenge, quota and budget gates and changes nothing on refusal", async () => {
+        const caller = await identity();
+        const token = unique("token");
+        const first = await failedOnce(caller, { challengeTokenHash: token });
+        await expect(
+          chat.retry(retryInput(caller, first.id, { challengeTokenHash: token })),
+        ).resolves.toEqual({ status: "challenge_reused" });
+        const quotas = [
+          { scope: "identity" as const, since: later(-60_000), limit: 1, resetsAt: null },
+        ];
+        await expect(chat.retry(retryInput(caller, first.id, { quotas }))).resolves.toMatchObject({
+          status: "quota_exceeded",
+          scope: "identity",
+        });
+        await expect(
+          chat.retry(retryInput(caller, first.id, { spend: onDay("2042-02-01", allowance - 1) })),
+        ).resolves.toEqual({ status: "budget_exhausted" });
+        const page = await chat.listMessages(caller.conversation.id, { limit: 20 });
+        expect(page.messages.map((message) => message.status)).toEqual(["completed", "failed"]);
+        await expect(chat.findActiveOperation(caller.identityId)).resolves.toBeNull();
+      });
+    });
+
+    describe("stop", () => {
+      it("stops an unclaimed operation and releases its reservation", async () => {
+        const startsOn = "2042-03-01";
+        const caller = await identity();
+        const operation = await admitted(admission(caller, { spend: onDay(startsOn) }));
+        const stopped = await chat.stop(caller.identityId, operation.id, later(1000), cancelled);
+        expect(stopped).toEqual({
+          status: "stopped",
+          operation: { ...operation, status: "cancelled" },
+          claimed: false,
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(0);
+        const found = await chat.findOperation(caller.identityId, operation.id);
+        expect(found?.assistant).toMatchObject({
+          status: "cancelled",
+          text: null,
+          errorCode: "cancelled",
+          errorRetryable: true,
+        });
+        await expect(chat.findActiveOperation(caller.identityId)).resolves.toBeNull();
+        await expect(
+          chat.stop(caller.identityId, operation.id, later(2000), cancelled),
+        ).resolves.toEqual({
+          status: "finished",
+          operation: { ...operation, status: "cancelled" },
+        });
+        await expect(chat.claimGrant(operation.id, "grant-verifier", later(3000))).resolves.toEqual(
+          { status: "refused" },
+        );
+      });
+
+      it("keeps a claimed operation's reservation uncertain until a late result settles its cost once", async () => {
+        const startsOn = "2042-04-01";
+        const caller = await identity();
+        const operation = await admitted(admission(caller, { spend: onDay(startsOn) }));
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await expect(
+          chat.stop(caller.identityId, operation.id, later(1000), cancelled),
+        ).resolves.toMatchObject({ status: "stopped", claimed: true });
+        expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+
+        const late = await chat.reconcile(operation.id, "grant-verifier", later(2000), answered());
+        expect(late).toEqual({
+          status: "already",
+          operation: { ...operation, status: "cancelled" },
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+        await chat.reconcile(
+          operation.id,
+          "grant-verifier",
+          later(3000),
+          answered({ costMicroUsd: 9_000 }),
+        );
+        expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+        const found = await chat.findOperation(caller.identityId, operation.id);
+        expect(found?.assistant).toMatchObject({ status: "cancelled", text: null, sources: [] });
+        expect(
+          await tableCount(
+            sql`SELECT cost_micro_usd::text AS count FROM chat.operations WHERE id = ${operation.id}`,
+          ),
+        ).toBe(4_000);
+      });
+
+      it("never stops another identity's operation", async () => {
+        const operation = await admitted(admission(await identity()));
+        const other = await identity();
+        await expect(chat.stop(other.identityId, operation.id, at, cancelled)).resolves.toBeNull();
+        await expect(chat.stop(other.identityId, randomUUID(), at, cancelled)).resolves.toBeNull();
+      });
+
+      it("ends a Stop and completion race one way only, settling the cost once", async () => {
+        for (let round = 0; round < 4; round += 1) {
+          const startsOn = `2042-05-0${String(round + 1)}`;
+          const caller = await identity();
+          const operation = await admitted(admission(caller, { spend: onDay(startsOn) }));
+          await chat.claimGrant(operation.id, "grant-verifier", at);
+          const [stopped, reconciled] = await Promise.all([
+            chat.stop(caller.identityId, operation.id, later(1000), cancelled),
+            chat.reconcile(operation.id, "grant-verifier", later(1000), answered()),
+          ]);
+          const found = await chat.findOperation(caller.identityId, operation.id);
+          if (stopped?.status === "stopped") {
+            expect(reconciled.status).toBe("already");
+            expect(found?.operation.status).toBe("cancelled");
+            expect(found?.assistant).toMatchObject({ status: "cancelled", text: null });
+          } else {
+            expect(stopped?.status).toBe("finished");
+            expect(reconciled.status).toBe("reconciled");
+            expect(found?.operation.status).toBe("completed");
+            expect(found?.assistant).toMatchObject({ status: "completed" });
+          }
+          expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+        }
+      });
+    });
+
+    describe("compaction", () => {
+      const summary = {
+        language: "en",
+        goals: ["Find a data engineer for a fictional pipeline"],
+        openQuestions: ["Is Alex available in spring?"],
+        covered: ["Alex builds data platforms."],
+        visitorClaims: [],
+        references: [{ kind: "person", recordId: "alex", title: "Alex" }],
+      };
+      const compactionOf = (
+        caller: ChatIdentityRecord,
+        overrides: Partial<ChatCompactionAdmissionInput> = {},
+      ): ChatCompactionAdmissionInput => {
+        const gates: Partial<ChatAdmissionInput> = { ...admission(caller) };
+        delete gates.question;
+        return {
+          ...(gates as Omit<ChatAdmissionInput, "question">),
+          questionHash: "compact-hash",
+          minimumExchanges: 3,
+          exchangeLimit: 6,
+          ...overrides,
+        };
+      };
+      const compacted = (overrides: Partial<ChatCompactionRecord> = {}): ChatCompactionRecord => ({
+        outcome: "compacted",
+        reason: null,
+        summary,
+        kept: 2,
+        summaryTokens: 120,
+        nextInputTokens: 900,
+        costMicroUsd: 3_000,
+        inputTokens: 2_000,
+        outputTokens: 150,
+        modelAttempts: 1,
+        latencyMs: 3_000,
+        versions: { prompt: "compaction-v1" },
+        exchangeLimit: 6,
+        ...overrides,
+      });
+      const failedCompaction = compacted({
+        outcome: "failed",
+        reason: "provider_error",
+        summary: null,
+        kept: 0,
+        summaryTokens: 0,
+        nextInputTokens: null,
+        costMicroUsd: 1_000,
+      });
+      /** `count` answered exchanges, `Question i` and `Answer i`. */
+      const exchangesOf = async (caller: ChatIdentityRecord, count: number, from = 0) => {
+        for (let index = from; index < from + count; index += 1) {
+          const operation = await admitted(
+            admission(caller, { question: `Question ${String(index)}` }),
+          );
+          await finish(operation.id, answered({ text: `Answer ${String(index)}` }));
+        }
+      };
+      const compactionAdmitted = async (input: ChatCompactionAdmissionInput) => {
+        const result = await chat.admitCompaction(input);
+        if (result.status !== "admitted") throw new Error(`Expected admission: ${result.status}`);
+        return result;
+      };
+      const questionsOf = (context: { exchanges: { question: string }[] }) =>
+        context.exchanges.map((exchange) => exchange.question);
+
+      it("admits a compaction of the working context without appending a message", async () => {
+        const startsOn = "2043-01-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const { operation, context } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        expect(operation).toMatchObject({
+          kind: "compaction",
+          status: "accepted",
+          userMessageId: null,
+          assistantMessageId: null,
+          contextRevision: 3,
+          compaction: null,
+        });
+        expect(context.revision).toBe(3);
+        expect(context.summary).toBeNull();
+        expect(questionsOf(context)).toEqual(["Question 0", "Question 1", "Question 2"]);
+        expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+        const history = await chat.listMessages(caller.conversation.id, { limit: 20 });
+        expect(history.messages).toHaveLength(6);
+
+        await expect(chat.findOperation(caller.identityId, operation.id)).resolves.toEqual({
+          operation,
+          assistant: null,
+        });
+        const claim = await chat.claimGrant(operation.id, "grant-verifier", at);
+        expect(claim).toEqual({
+          status: "claimed",
+          operation: { ...operation, status: "running" },
+        });
+      });
+
+      it("has nothing to compact below the minimum and consumes nothing", async () => {
+        const startsOn = "2043-02-01";
+        const caller = await identity();
+        await exchangesOf(caller, 2);
+        const input = compactionOf(caller, { spend: onDay(startsOn) });
+        await expect(chat.admitCompaction(input)).resolves.toEqual({
+          status: "nothing_to_compact",
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(0);
+        await expect(chat.findActiveOperation(caller.identityId)).resolves.toBeNull();
+        // The challenge token stays unredeemed.
+        await admitted(admission(caller, { challengeTokenHash: input.challengeTokenHash }));
+      });
+
+      it("recovers a repeated compaction request and holds the conversation lock", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const input = compactionOf(caller);
+        const { operation } = await compactionAdmitted(input);
+        await expect(
+          chat.admitCompaction({ ...input, challengeTokenHash: unique("token") }),
+        ).resolves.toEqual({ status: "duplicate", operation, sameQuestion: true });
+        await expect(chat.admitCompaction(compactionOf(caller))).resolves.toEqual({
+          status: "busy",
+          operation,
+        });
+        await expect(chat.admit(admission(caller))).resolves.toEqual({ status: "busy", operation });
+
+        const asking = await identity();
+        await exchangesOf(asking, 3);
+        const question = await admitted(admission(asking));
+        await expect(chat.admitCompaction(compactionOf(asking))).resolves.toEqual({
+          status: "busy",
+          operation: question,
+        });
+        // A question's request id cannot name a compaction.
+        await expect(
+          chat.admitCompaction(compactionOf(asking, { requestId: question.requestId })),
+        ).resolves.toMatchObject({ status: "duplicate", sameQuestion: false });
+      });
+
+      it("rechecks the challenge and budget gates and stores nothing on refusal", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const used = unique("token");
+        await finish((await admitted(admission(caller, { challengeTokenHash: used }))).id);
+        await expect(
+          chat.admitCompaction(compactionOf(caller, { challengeTokenHash: used })),
+        ).resolves.toEqual({ status: "challenge_reused" });
+        await expect(
+          chat.admitCompaction(compactionOf(caller, { spend: onDay("2043-03-01", allowance - 1) })),
+        ).resolves.toEqual({ status: "budget_exhausted" });
+        expect(
+          await tableCount(
+            sql`SELECT count(*)::text AS count FROM chat.operations WHERE conversation_id = ${caller.conversation.id} AND kind = 'compaction'`,
+          ),
+        ).toBe(0);
+      });
+
+      it("installs a valid summary only at its revision and keeps every message", async () => {
+        const startsOn = "2043-04-01";
+        const caller = await identity();
+        await exchangesOf(caller, 4);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await expect(
+          chat.reconcile(operation.id, "grant-verifier", at, answered()),
+        ).resolves.toEqual({ status: "wrong_grant" });
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await expect(
+          chat.reconcile(operation.id, "grant-verifier", at, answered()),
+        ).resolves.toEqual({ status: "wrong_grant" });
+        const result = await chat.reconcileCompaction(
+          operation.id,
+          "grant-verifier",
+          later(5000),
+          compacted(),
+        );
+        expect(result).toEqual({
+          status: "reconciled",
+          operation: {
+            ...operation,
+            status: "completed",
+            compaction: { outcome: "compacted", reason: null },
+          },
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+
+        const context = await chat.workingContext(caller.conversation.id, 6);
+        expect(context.revision).toBe(5);
+        expect(context.summary).toEqual(summary);
+        expect(questionsOf(context)).toEqual(["Question 2", "Question 3"]);
+        const history = await chat.listMessages(caller.conversation.id, { limit: 20 });
+        expect(history.messages).toHaveLength(8);
+        const page = await chat.listMessages(caller.conversation.id, { limit: 3 });
+        expect(page.hasMore).toBe(true);
+
+        await expect(
+          chat.reconcileCompaction(operation.id, "grant-verifier", later(6000), compacted()),
+        ).resolves.toMatchObject({ status: "already" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+
+        await exchangesOf(caller, 1, 4);
+        const after = await chat.workingContext(caller.conversation.id, 6);
+        expect(after.summary).toEqual(summary);
+        expect(questionsOf(after)).toEqual(["Question 2", "Question 3", "Question 4"]);
+
+        // A later compaction folds the installed summary and the exchanges after it.
+        const again = await compactionAdmitted(compactionOf(caller));
+        expect(again.context.summary).toEqual(summary);
+        expect(questionsOf(again.context)).toEqual(["Question 2", "Question 3", "Question 4"]);
+        await chat.claimGrant(again.operation.id, "grant-verifier", at);
+        await chat.reconcileCompaction(
+          again.operation.id,
+          "grant-verifier",
+          later(7000),
+          compacted({ kept: 0, summary: { ...summary, goals: [] } }),
+        );
+        const folded = await chat.workingContext(caller.conversation.id, 6);
+        expect(folded.summary).toEqual({ ...summary, goals: [] });
+        expect(folded.exchanges).toEqual([]);
+      });
+
+      it("refuses to store an answer's result as a compaction", async () => {
+        const caller = await identity();
+        const question = await admitted(admission(caller));
+        await chat.claimGrant(question.id, "grant-verifier", at);
+        await expect(
+          chat.reconcileCompaction(question.id, "grant-verifier", at, compacted()),
+        ).resolves.toEqual({ status: "wrong_grant" });
+      });
+
+      it("keeps the prior working context for a failed, unchanged or stale result", async () => {
+        const startsOn = "2043-05-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const contextBefore = await chat.workingContext(caller.conversation.id, 6);
+
+        const failing = await compactionAdmitted(compactionOf(caller, { spend: onDay(startsOn) }));
+        await chat.claimGrant(failing.operation.id, "grant-verifier", at);
+        await expect(
+          chat.reconcileCompaction(failing.operation.id, "grant-verifier", at, failedCompaction),
+        ).resolves.toEqual({
+          status: "reconciled",
+          operation: {
+            ...failing.operation,
+            status: "failed",
+            compaction: { outcome: "failed", reason: "provider_error" },
+          },
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(1_000);
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual(
+          contextBefore,
+        );
+
+        const unchanged = await compactionAdmitted(compactionOf(caller));
+        await chat.claimGrant(unchanged.operation.id, "grant-verifier", at);
+        await expect(
+          chat.reconcileCompaction(
+            unchanged.operation.id,
+            "grant-verifier",
+            at,
+            compacted({
+              outcome: "unchanged",
+              reason: "already_small",
+              summary: null,
+              kept: 0,
+              summaryTokens: 0,
+              nextInputTokens: null,
+            }),
+          ),
+        ).resolves.toMatchObject({
+          status: "reconciled",
+          operation: {
+            status: "completed",
+            compaction: { outcome: "unchanged", reason: "already_small" },
+          },
+        });
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual(
+          contextBefore,
+        );
+
+        const stale = await compactionAdmitted(compactionOf(caller));
+        await chat.claimGrant(stale.operation.id, "grant-verifier", at);
+        await connection.db.execute(
+          sql`UPDATE chat.conversations SET revision = revision + 1 WHERE id = ${caller.conversation.id}`,
+        );
+        await expect(
+          chat.reconcileCompaction(stale.operation.id, "grant-verifier", at, compacted()),
+        ).resolves.toMatchObject({
+          status: "reconciled",
+          operation: { status: "completed", compaction: { outcome: "unchanged", reason: "stale" } },
+        });
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual({
+          ...contextBefore,
+          revision: contextBefore.revision + 1,
+        });
+      });
+
+      it("keeps the full reservation when a compaction's cost is uncertain", async () => {
+        const startsOn = "2043-06-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await chat.reconcileCompaction(
+          operation.id,
+          "grant-verifier",
+          at,
+          compacted({ costMicroUsd: null }),
+        );
+        expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+      });
+
+      it("installs nothing from a stopped compaction and settles its late cost once", async () => {
+        const startsOn = "2043-07-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const contextBefore = await chat.workingContext(caller.conversation.id, 6);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await expect(
+          chat.stop(caller.identityId, operation.id, later(1000), cancelled),
+        ).resolves.toEqual({
+          status: "stopped",
+          operation: { ...operation, status: "cancelled" },
+          claimed: true,
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(allowance);
+        await expect(
+          chat.reconcileCompaction(operation.id, "grant-verifier", later(2000), compacted()),
+        ).resolves.toMatchObject({ status: "already" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+        await expect(
+          chat.reconcileCompaction(
+            operation.id,
+            "grant-verifier",
+            later(3000),
+            compacted({ costMicroUsd: 9_000 }),
+          ),
+        ).resolves.toMatchObject({ status: "already" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+        await expect(chat.workingContext(caller.conversation.id, 6)).resolves.toEqual(
+          contextBefore,
+        );
+      });
+
+      it("interrupts an overdue compaction and never retries one", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const when = later(3_600_000);
+        const { operation } = await compactionAdmitted(compactionOf(caller, { at: when }));
+        const interrupted = await chat.interruptOverdue(
+          later(70_000, when),
+          later(70_000, when),
+          timeout,
+        );
+        expect(interrupted).toContain(operation.id);
+        await expect(chat.findOperation(caller.identityId, operation.id)).resolves.toMatchObject({
+          operation: { status: "interrupted" },
+          assistant: null,
+        });
+        await expect(chat.retry(retryInput(caller, operation.id))).resolves.toEqual({
+          status: "not_retryable",
+        });
+        await expect(
+          chat.findOperationByRequest(caller.identityId, operation.requestId),
+        ).resolves.toMatchObject({ id: operation.id, kind: "compaction" });
+      });
+
+      it("settles only the measured cost of a cleared conversation's compaction", async () => {
+        const startsOn = "2043-08-01";
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const { operation } = await compactionAdmitted(
+          compactionOf(caller, { spend: onDay(startsOn) }),
+        );
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        const cleared = await chat.clear({
+          identityId: caller.identityId,
+          conversationId: caller.conversation.id,
+          at: later(1000),
+          error: cancelled,
+          tombstoneExpiresAt: later(86_400_000),
+        });
+        if (cleared.status !== "cleared") throw new Error(cleared.status);
+        await expect(
+          chat.reconcileCompaction(operation.id, "grant-verifier", later(2000), compacted()),
+        ).resolves.toEqual({ status: "deleted" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(3_000);
+        await expect(chat.workingContext(cleared.conversation.id, 6)).resolves.toEqual({
+          revision: 0,
+          summary: null,
+          exchanges: [],
+        });
+      });
+
+      it("estimates the next request after an installed compaction until an answer measures", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const usageOf = (when: Date) =>
+          chat.usage({
+            identityId: caller.identityId,
+            conversationId: caller.conversation.id,
+            fingerprint: unique("fingerprint"),
+            at: when,
+            quotas: [],
+            spend: [],
+            allowanceMicroUsd: allowance,
+          });
+        const { operation } = await compactionAdmitted(compactionOf(caller));
+        await chat.claimGrant(operation.id, "grant-verifier", at);
+        await chat.reconcileCompaction(operation.id, "grant-verifier", later(5000), compacted());
+        await expect(usageOf(later(6000))).resolves.toMatchObject({
+          context: null,
+          nextRequest: { operationId: operation.id, measuredAt: later(5000), historyTokens: 900 },
+        });
+
+        const context = {
+          estimatedInputTokens: 3_000,
+          reportedInputTokens: 3_100,
+          capTokens: 16_000,
+        };
+        const question = await admitted(admission(caller, { at: later(7000) }));
+        await chat.claimGrant(question.id, "grant-verifier", later(7000));
+        await chat.reconcile(question.id, "grant-verifier", later(8000), answered({ context }));
+        await expect(usageOf(later(9000))).resolves.toMatchObject({
+          context: { operationId: question.id, measuredAt: later(8000), ...context },
+          nextRequest: null,
+        });
+      });
+
+      it("enforces each kind's message ids in the database", async () => {
+        const caller = await identity();
+        await exchangesOf(caller, 3);
+        const question = await admitted(admission(caller));
+        await expect(
+          connection.db.execute(
+            sql`UPDATE chat.operations SET assistant_message_id = NULL WHERE id = ${question.id}`,
+          ),
+        ).rejects.toThrow();
+        await expect(
+          connection.db.execute(
+            sql`UPDATE chat.operations SET kind = 'compaction' WHERE id = ${question.id}`,
+          ),
+        ).rejects.toThrow();
+        await expect(
+          connection.db.execute(
+            sql`UPDATE chat.operations SET kind = 'other' WHERE id = ${question.id}`,
+          ),
+        ).rejects.toThrow();
+      });
+    });
+
+    describe("clear", () => {
+      const clearing = (caller: ChatIdentityRecord, overrides: Partial<ChatClearInput> = {}) => ({
+        identityId: caller.identityId,
+        conversationId: caller.conversation.id,
+        at: later(5000),
+        error: cancelled,
+        tombstoneExpiresAt: later(86_400_000),
+        ...overrides,
+      });
+      const cleared = async (input: ChatClearInput) => {
+        const result = await chat.clear(input);
+        if (result.status !== "cleared") throw new Error(result.status);
+        return result;
+      };
+
+      it("cancels active work, deletes the messages and starts a fresh conversation, quotas kept", async () => {
+        const startsOn = "2042-06-01";
+        const verifier = unique("verifier");
+        const caller = await chat.createIdentity(verifier, at);
+        const quotas = [
+          { scope: "identity" as const, since: later(-60_000), limit: 2, resetsAt: null },
+        ];
+        const done = await admitted(admission(caller, { spend: onDay(startsOn), quotas }));
+        await finish(done.id);
+        const running = await admitted(admission(caller, { spend: onDay(startsOn), quotas }));
+        await chat.claimGrant(running.id, "grant-verifier", at);
+
+        const result = await cleared(clearing(caller));
+        expect(result.cancelled).toEqual([running.id]);
+        expect(result.telemetryPending).toBe(0);
+        expect(result.conversation.id).not.toBe(caller.conversation.id);
+        expect(result.conversation.revision).toBe(0);
+        const resolved = await chat.resolveIdentity(verifier, later(6000));
+        expect(resolved?.identityId).toBe(caller.identityId);
+        expect(resolved?.conversation.id).toBe(result.conversation.id);
+        await expect(chat.listMessages(caller.conversation.id, { limit: 20 })).resolves.toEqual({
+          messages: [],
+          hasMore: false,
+        });
+        await expect(chat.listMessages(result.conversation.id, { limit: 20 })).resolves.toEqual({
+          messages: [],
+          hasMore: false,
+        });
+        await expect(chat.findOperation(caller.identityId, done.id)).resolves.toBeNull();
+        await expect(chat.findActiveOperation(caller.identityId)).resolves.toBeNull();
+        // The running attempt's cost is unknown, so its reservation stays.
+        expect(await chat.committedSpend("day", startsOn)).toBe(4_000 + allowance);
+        const fresh = { ...caller, conversation: result.conversation };
+        await expect(chat.admit(admission(fresh, { quotas }))).resolves.toMatchObject({
+          status: "quota_exceeded",
+        });
+      });
+
+      it("keeps a redeemed challenge token unusable after clearing", async () => {
+        const caller = await identity();
+        const token = unique("token");
+        const operation = await admitted(admission(caller, { challengeTokenHash: token }));
+        await finish(operation.id);
+        const result = await cleared(clearing(caller));
+        const fresh = { ...caller, conversation: result.conversation };
+        await expect(chat.admit(admission(fresh, { challengeTokenHash: token }))).resolves.toEqual({
+          status: "challenge_reused",
+        });
+      });
+
+      it("lets a late claim or result recreate nothing and settles the measured cost once", async () => {
+        const startsOn = "2042-07-01";
+        const caller = await identity();
+        const claimed = await admitted(admission(caller, { spend: onDay(startsOn) }));
+        await chat.claimGrant(claimed.id, "grant-verifier", at);
+        const result = await cleared(clearing(caller));
+        await expect(
+          chat.reconcile(claimed.id, "other-verifier", later(6000), answered()),
+        ).resolves.toEqual({
+          status: "wrong_grant",
+        });
+        await expect(
+          chat.reconcile(claimed.id, "grant-verifier", later(6000), answered()),
+        ).resolves.toEqual({
+          status: "deleted",
+        });
+        expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+        await expect(
+          chat.reconcile(
+            claimed.id,
+            "grant-verifier",
+            later(7000),
+            answered({ costMicroUsd: 9_000 }),
+          ),
+        ).resolves.toEqual({ status: "deleted" });
+        expect(await chat.committedSpend("day", startsOn)).toBe(4_000);
+        await expect(chat.listMessages(result.conversation.id, { limit: 20 })).resolves.toEqual({
+          messages: [],
+          hasMore: false,
+        });
+
+        const fresh = { ...caller, conversation: result.conversation };
+        const unclaimed = await admitted(admission(fresh));
+        await cleared(clearing(fresh, { at: later(8000) }));
+        await expect(chat.claimGrant(unclaimed.id, "grant-verifier", later(9000))).resolves.toEqual(
+          {
+            status: "wrong_grant",
+          },
+        );
+        expect(
+          await tableCount(
+            sql`SELECT count(*)::text AS count FROM chat.messages WHERE conversation_id = ${caller.conversation.id} OR conversation_id = ${result.conversation.id}`,
+          ),
+        ).toBe(0);
+      });
+
+      it("clears nothing for another conversation id", async () => {
+        const caller = await identity();
+        const operation = await admitted(admission(caller));
+        await expect(
+          chat.clear(clearing(caller, { conversationId: randomUUID() })),
+        ).resolves.toEqual({
+          status: "mismatch",
+        });
+        const other = await identity();
+        await expect(
+          chat.clear(clearing(other, { conversationId: caller.conversation.id })),
+        ).resolves.toEqual({ status: "mismatch" });
+        await expect(chat.findActiveOperation(caller.identityId)).resolves.toEqual(operation);
+      });
+    });
+  });
+});

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   readAnalyticsConfig,
+  readChatRelayConfig,
   readIndexingConfig,
   readInvalidationSecret,
+  readTurnstileSiteKey,
   readWebConfig,
 } from "./config";
 
@@ -393,5 +395,76 @@ describe("readIndexingConfig", () => {
       );
     }
     expect(() => readIndexingConfig({ WEB_INDEXING: "s3cret" })).not.toThrow(/s3cret/);
+  });
+});
+
+describe("readTurnstileSiteKey", () => {
+  it("reads the public site key, such as the official always-passing test key", () => {
+    expect(readTurnstileSiteKey({ WEB_TURNSTILE_SITE_KEY: "1x00000000000000000000AA" })).toBe(
+      "1x00000000000000000000AA",
+    );
+  });
+
+  it.each([
+    ["unset", {}],
+    ["empty", { WEB_TURNSTILE_SITE_KEY: "" }],
+  ])("is null when %s, so the chat cannot send a question", (_label, env) => {
+    expect(readTurnstileSiteKey(env)).toBeNull();
+  });
+
+  it.each([
+    ["markup", "<script>"],
+    ["a space", "0x4AAA BBBB"],
+    ["too long", "k".repeat(101)],
+  ])("refuses a key with %s and names the variable, not the value", (_label, value) => {
+    expect(() => readTurnstileSiteKey({ WEB_TURNSTILE_SITE_KEY: value })).toThrow(
+      /^Invalid website configuration \(documented in \.env\.example\): WEB_TURNSTILE_SITE_KEY must be/,
+    );
+    expect(() => readTurnstileSiteKey({ WEB_TURNSTILE_SITE_KEY: value })).not.toThrow(value);
+  });
+});
+
+describe("readChatRelayConfig", () => {
+  // A disposable fixture token.
+  const TOKEN = "fixture-chat-relay-token-0123456789abcdef";
+
+  it("reads the relay token and trusts no proxy hop by default", () => {
+    expect(readChatRelayConfig({ WEB_CHAT_RELAY_TOKEN: TOKEN })).toEqual({
+      token: TOKEN,
+      trustedProxyHops: 0,
+    });
+    expect(
+      readChatRelayConfig({ WEB_CHAT_RELAY_TOKEN: TOKEN, WEB_TRUSTED_PROXY_HOPS: "" }),
+    ).toMatchObject({ trustedProxyHops: 0 });
+  });
+
+  it("reads the number of trusted proxy hops", () => {
+    expect(
+      readChatRelayConfig({ WEB_CHAT_RELAY_TOKEN: TOKEN, WEB_TRUSTED_PROXY_HOPS: "1" }),
+    ).toMatchObject({ trustedProxyHops: 1 });
+    expect(
+      readChatRelayConfig({ WEB_CHAT_RELAY_TOKEN: TOKEN, WEB_TRUSTED_PROXY_HOPS: "3" }),
+    ).toMatchObject({ trustedProxyHops: 3 });
+  });
+
+  it.each([
+    ["unset", {}],
+    ["empty", { WEB_CHAT_RELAY_TOKEN: "" }],
+  ])("is null when the token is %s, so the relay sends nothing", (_label, env) => {
+    expect(readChatRelayConfig(env)).toBeNull();
+  });
+
+  it("refuses a short token and names the variable, not the value", () => {
+    const short = () => readChatRelayConfig({ WEB_CHAT_RELAY_TOKEN: "short-fixture-relay" });
+    expect(short).toThrow(
+      /^Invalid website configuration \(documented in \.env\.example\): WEB_CHAT_RELAY_TOKEN must be at least 32 characters/,
+    );
+    expect(short).not.toThrow(/short-fixture-relay/);
+  });
+
+  it.each(["-1", "1.5", "one", "11"])("refuses %s proxy hops", (hops) => {
+    expect(() =>
+      readChatRelayConfig({ WEB_CHAT_RELAY_TOKEN: TOKEN, WEB_TRUSTED_PROXY_HOPS: hops }),
+    ).toThrow(/WEB_TRUSTED_PROXY_HOPS must be a whole number from 0 to 10/);
   });
 });

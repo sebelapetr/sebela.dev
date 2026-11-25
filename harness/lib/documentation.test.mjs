@@ -35,7 +35,7 @@ test("is everything in docs/ and .plan/, whatever a folder inside them is called
     "docs/src/overview.md",
     "docs/fixtures/example.png",
     ".plan/done/06-llm-agent/evals/notes.md",
-    ".plan/07-ai-service/fixtures/sample.json",
+    ".plan/done/07-ai-service/fixtures/sample.json",
   ]) {
     assert.equal(isDocumentation(file), true, file);
   }
@@ -73,7 +73,10 @@ test("is not Markdown that code reads: sources, evals, fixtures and the reposito
 });
 
 test("is not a guide a package's build reads as its readme", () => {
-  // packages/llm-agent/pyproject.toml names AGENTS.md as the readme of the built package, so a
-  // change to it changes the package metadata the build produces.
+  // The pyproject.toml of packages/llm-agent, packages/api-client-python and apps/ai-service names
+  // AGENTS.md as the readme of the built package, so a change to it changes the package metadata
+  // the build produces.
   assert.equal(isDocumentation("packages/llm-agent/AGENTS.md"), false);
+  assert.equal(isDocumentation("packages/api-client-python/AGENTS.md"), false);
+  assert.equal(isDocumentation("apps/ai-service/AGENTS.md"), false);
 });

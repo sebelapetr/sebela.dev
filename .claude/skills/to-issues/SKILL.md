@@ -26,7 +26,7 @@ Adapted from the `to-issues` skill in mattpocock/skills. Differences for this re
 
 ### 1. Gather context
 
-Work from whatever is already in the conversation context. If the user passes a PRD path (for example `.plan/07-ai-service/prd.md`) or an issue reference as an argument, read it in full. Always read `.plan/00-overview/prd.md` and `AGENTS.md` as well.
+Work from whatever is already in the conversation context. If the user passes a PRD path (for example `.plan/done/07-ai-service/prd.md`) or an issue reference as an argument, read it in full. Always read `.plan/00-overview/prd.md` and `AGENTS.md` as well.
 
 ### 2. Explore the codebase (optional)
 
@@ -104,7 +104,7 @@ Then write `.plan/NN-<phase>/issues.md`: the tracking issue's number and a table
 <issue-template>
 ## Parent
 
-Path of the PRD this slice comes from (for example `.plan/07-ai-service/prd.md`) and the user stories it covers.
+Path of the PRD this slice comes from (for example `.plan/done/07-ai-service/prd.md`) and the user stories it covers.
 
 ## What to build
 

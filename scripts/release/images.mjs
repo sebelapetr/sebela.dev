@@ -36,14 +36,27 @@ import path from "node:path";
 
 import { withoutDocumentation } from "../checks/without-documentation.mjs";
 
-export const SERVICES = ["api", "web", "mcp-admin"];
+export const SERVICES = ["api", "web", "mcp-admin", "ai-service"];
 
 export const REGISTRY = "ghcr.io/sebelapetr";
 
 /** The tag of the last verified image of each service published from master. */
 export const CURRENT_TAG = "current";
 
-const PACKAGES = { api: "@sebela/api", web: "@sebela/web", "mcp-admin": "@sebela/mcp-admin" };
+const PACKAGES = {
+  api: "@sebela/api",
+  web: "@sebela/web",
+  "mcp-admin": "@sebela/mcp-admin",
+  "ai-service": "@sebela/ai-service",
+};
+
+/**
+ * Root files that enter only one image build, which Turborepo counts for no app (the root Python
+ * files belong to the root package): the Python manifest, lockfile and version of the AI service.
+ */
+const SERVICE_BUILD_INPUTS = {
+  "ai-service": new Set(["pyproject.toml", "uv.lock", ".python-version"]),
+};
 
 /**
  * Root files that enter every image build (the build context's allowlist in .dockerignore) and
@@ -85,7 +98,11 @@ export function affectedPackages(output) {
 export function affectedServices({ packages, changedFiles }) {
   if (changedFiles.some((file) => IMAGE_BUILD_INPUTS.has(file))) return [...SERVICES];
   const selected = new Set(packages);
-  return SERVICES.filter((service) => selected.has(PACKAGES[service]));
+  return SERVICES.filter(
+    (service) =>
+      selected.has(PACKAGES[service]) ||
+      changedFiles.some((file) => SERVICE_BUILD_INPUTS[service]?.has(file)),
+  );
 }
 
 const isCommit = (revision) => typeof revision === "string" && COMMIT.test(revision);

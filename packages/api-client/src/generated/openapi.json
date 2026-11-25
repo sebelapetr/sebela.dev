@@ -3,7 +3,7 @@
   "info": {
     "title": "Sebela API",
     "version": "1",
-    "description": "The content API of sebelapetr.cz. Reads are public; every write needs an API key, sent as `Authorization: Bearer <key>` and never in the URL. Every route is rate limited and answers failures with the common error shape. `GET /health` reports liveness only."
+    "description": "The content API of sebelapetr.cz. Reads are public; every write needs an API key, sent as `Authorization: Bearer <key>` and never in the URL. Every route is rate limited and answers failures with the common error shape. `GET /health` reports liveness only. The one exception: a visitor asks the chat over the cookie-authorised `/v1/chat` routes, which accept only the website's origin; the AI service reports back over the internal control routes with its own control token."
   },
   "paths": {
     "/health": {
@@ -12771,6 +12771,1703 @@
         }
       }
     },
+    "/v1/chat/conversation": {
+      "get": {
+        "operationId": "getChatConversation",
+        "summary": "Read the visitor's chat conversation",
+        "description": "The caller's one conversation, newest messages first in pages, with its active operation. The caller is the chat cookie; a request without one gets a new identity. Never cached.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "description": "Read the messages before this message of the caller's conversation.",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "description": "Read the messages before this message of the caller's conversation."
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The conversation.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatConversation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (an unknown or invalid query parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "clearChatConversation",
+        "summary": "Clear the visitor's chat conversation",
+        "description": "Deletes the caller's conversation when the body names it, as the visitor confirmed: active work is cancelled, messages are deleted, late results are refused and a fresh empty conversation of the same identity starts. Quotas and spend stay. Any other conversation ID clears nothing and returns the caller's conversation unchanged; a URL is never a delete credential. `telemetryDeletion` is `pending` while exported telemetry still awaits deletion.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatConversationClear"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the conversation was cleared, and the caller's conversation now.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatConversationCleared"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/conversation/messages": {
+      "post": {
+        "operationId": "askChat",
+        "summary": "Ask the chat a question",
+        "description": "The one public write: the caller asks one question of their own conversation behind the bot challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's server from an allowed origin; the visitor's address for the quotas and the challenge is the one the website's relay names, if any. Admission returns at once; the answer is generated detached from the request and read from the operation's events.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatMessageSubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same request again: its existing operation.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The question is admitted.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`chat_request_conflict`: the request ID was used for another question; `chat_busy`: the conversation already has a question in progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted; `chat_quota_exceeded`: the visitor's question quota is spent.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`chat_budget_exhausted`: the chat's spend budget is spent; `unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/conversation/compact": {
+      "post": {
+        "operationId": "compactChatConversation",
+        "summary": "Compact the visitor's working context",
+        "description": "The visitor's `/compact`: summarizes the caller's current working context (the previous summary and the exchanges since it) so later questions carry less history. It is no message, appends nothing and changes no visible history. A context of fewer than three exchanges is a local no-op before any challenge, quota or spend. Otherwise the bot challenge, the quotas and the spend budget apply as to a question, and it holds the conversation as a question does; its progress is read from the operation, from any tab. The same request ID again is recovered before any challenge. Never retried automatically.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompactionSubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same request again (its operation), or a local no-op.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompactionResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The compaction is admitted: its operation.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`chat_request_conflict`: the request ID was used for a question; `chat_busy`: the conversation already has a question or compaction in progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted; `chat_quota_exceeded`: the visitor's question quota is spent.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`chat_budget_exhausted`: the chat's spend budget is spent; `unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/operations/{operationId}": {
+      "get": {
+        "operationId": "getChatOperation",
+        "summary": "Read a chat operation",
+        "description": "One of the caller's operations and its status. Never cached.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          },
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/operations/{operationId}/events": {
+      "get": {
+        "operationId": "streamChatOperation",
+        "summary": "Stream a chat operation's events",
+        "description": "Server-sent events of one of the caller's operations. Each `chat` event carries a `ChatStreamEvent` with its event ID; a reconnect with `Last-Event-ID` continues after it with the same IDs. While the operation runs, a `progress` event without an ID carries a `ChatProgress` at least every five seconds. The stream ends at the terminal event, or after the deadline and a short grace with a retryable `timeout` error.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          },
+          {
+            "in": "header",
+            "name": "last-event-id",
+            "schema": {
+              "description": "The last chat event ID the client received; later events follow.",
+              "type": "string"
+            },
+            "description": "The last chat event ID the client received; later events follow."
+          },
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event stream.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/usage": {
+      "get": {
+        "operationId": "getChatUsage",
+        "summary": "Read the visitor's chat usage and limits",
+        "description": "The caller's own meters (questions in the rolling two hours and the UTC day), the restriction a new question would meet now and when it may pass again, the effective main model and effort, the active operation and the conversation's last measured main-call input against its cap. Reading consumes nothing and admits nothing; the meters are informative, admission decides alone. Never another visitor's counts or the site's spend. Never cached.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The usage snapshot.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatUsage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/operations/{operationId}/stop": {
+      "post": {
+        "operationId": "stopChatOperation",
+        "summary": "Stop a chat operation",
+        "description": "Stops one of the caller's operations from any tab, without a new bot challenge: an active operation ends as a retryable `cancelled` error, and a generation that claimed its grant is told to stop. Its reserved cost stays until the generation reports what it spent. An operation that already ended is returned as it is.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          },
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The operation, cancelled or as it ended.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay or has no allowed origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/operations/{operationId}/retry": {
+      "post": {
+        "operationId": "retryChatOperation",
+        "summary": "Retry a failed chat answer",
+        "description": "Asks the question of one of the caller's failed attempts again as a new attempt of the same request, keyed by its own retry ID, and replaces only the failed answer. The same retry ID again, or an attempt of that request that is active or answered, is recovered before any challenge, quota or spend. Otherwise the bot challenge, the quotas and the spend budget apply as to a question.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          },
+          {
+            "in": "cookie",
+            "name": "sebela_chat",
+            "schema": {
+              "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity.",
+              "type": "string"
+            },
+            "description": "The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRetrySubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The retry or the attempt recovered: its operation.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The retry is admitted.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "`sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`chat_request_conflict`: the retry ID was used for another attempt; `chat_busy`: the conversation already has a question in progress; `chat_not_retryable`: the attempt did not end with a retryable failure of the latest question.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted; `chat_quota_exceeded`: the visitor's question quota is spent.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`chat_budget_exhausted`: the chat's spend budget is spent; `unavailable`: the chat is off or its database cannot be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/internal/chat/grants/claim": {
+      "post": {
+        "operationId": "claimChatGrant",
+        "summary": "Claim a chat generation grant",
+        "description": "Internal: the AI service claims an operation's one-use grant before it spends anything, and learns what the generation is bound to.",
+        "security": [
+          {
+            "controlToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatGrantClaim"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The grant is claimed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatGrantClaimed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the control token is missing or wrong; no API key is accepted.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the grant is not the operation's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the grant was claimed already, or the operation is over.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/internal/chat/operations/{operationId}/result": {
+      "post": {
+        "operationId": "reportChatResult",
+        "summary": "Report a chat generation result",
+        "description": "Internal: the AI service reports the one result of a claimed operation. A result that fails the contract is stored as an internal failure, never as an answer; a repeat changes nothing and answers the stored operation.",
+        "security": [
+          {
+            "controlToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatGenerationResult"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The operation as reconciled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the control token is missing or wrong; no API key is accepted.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the grant is not the operation's, or the operation is a compaction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the operation's grant has not been claimed, or its conversation was cleared.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/internal/chat/operations/{operationId}/compaction": {
+      "post": {
+        "operationId": "reportChatCompaction",
+        "summary": "Report a chat compaction result",
+        "description": "Internal: the AI service reports the one result of a claimed compaction. A valid summary is installed only at the operation's context revision; a stale, failed or invalid result keeps the working context unchanged. A result that fails the contract is stored as a failure; a repeat changes nothing and answers the stored operation.",
+        "security": [
+          {
+            "controlToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompactionResult"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The operation as reconciled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatOperation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the control token is missing or wrong; no API key is accepted.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the grant is not the operation's, or the operation is an answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the operation's grant has not been claimed, or its conversation was cleared.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/internal/chat/operations/{operationId}/telemetry": {
+      "post": {
+        "operationId": "registerChatTelemetry",
+        "summary": "Register a chat trace before its export",
+        "description": "Internal: the AI service registers each trace of a claimed operation before it exports it, and exports it only on `allowed`, within 10 minutes of the registration. The API deletes the remote copy at `expiresAt`, 30 days later, or when the conversation is deleted. `refused` means the trace must not be exported, because its conversation or operation is gone or it is already owed a deletion; `expiresAt` is then when its remote copy, should one exist, is deleted. A repeat answers alike.",
+        "security": [
+          {
+            "controlToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatTelemetryRegistration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the trace may be exported, and when its remote copy is deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatTelemetryRegistered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: the control token is missing or wrong; no API key is accepted.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "`Bearer`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the grant is not the operation's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict`: the operation's grant has not been claimed, or the trace is another operation's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body exceeds the configured limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: the body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: a rate-limit budget is exhausted.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the budget is renewed.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal_error`: an unexpected failure, without details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApiDocument",
@@ -16294,6 +17991,865 @@
           "document"
         ]
       },
+      "ChatConversationClear": {
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The conversation the visitor confirmed clearing; must be the current one."
+          }
+        },
+        "required": [
+          "conversationId"
+        ],
+        "additionalProperties": false
+      },
+      "ChatMessageSubmission": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "This question's request, generated by the client; a retry reuses it and recovers it."
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "challengeToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The bot-challenge token of this submission; redeemed once, never stored."
+          }
+        },
+        "required": [
+          "requestId",
+          "question",
+          "challengeToken"
+        ],
+        "additionalProperties": false
+      },
+      "ChatCompactionSubmission": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "This compaction's request, generated by the client; repeating it recovers the compaction."
+          },
+          "challengeToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The bot-challenge token of this compaction; redeemed once, never stored."
+          }
+        },
+        "required": [
+          "requestId",
+          "challengeToken"
+        ],
+        "additionalProperties": false
+      },
+      "ChatRetrySubmission": {
+        "type": "object",
+        "properties": {
+          "retryId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "This retry's own idempotency key, generated by the client; repeating it recovers the retry."
+          },
+          "challengeToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The bot-challenge token of this retry; redeemed once, never stored."
+          }
+        },
+        "required": [
+          "retryId",
+          "challengeToken"
+        ],
+        "additionalProperties": false
+      },
+      "ChatGrantClaim": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "grant": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "operationId",
+          "grant"
+        ],
+        "additionalProperties": false
+      },
+      "ChatGenerationResult": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "insufficient_evidence",
+              "refused",
+              "unavailable",
+              "cancelled",
+              "limit_reached"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "cs"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 32000
+          },
+          "blocks": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatBlock"
+            }
+          },
+          "sources": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatSource"
+            }
+          },
+          "related": {
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatRelatedLink"
+            }
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "costUsd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "costUncertain": {
+                "type": "boolean"
+              },
+              "inputTokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "outputTokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "modelAttempts": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "costUsd",
+              "costUncertain",
+              "inputTokens",
+              "outputTokens",
+              "modelAttempts"
+            ],
+            "additionalProperties": false
+          },
+          "versions": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "latencyMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "estimatedInputTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reportedInputTokens": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "capTokens": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "estimatedInputTokens",
+                  "reportedInputTokens",
+                  "capTokens"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "grant",
+          "outcome",
+          "reason",
+          "language",
+          "text",
+          "blocks",
+          "sources",
+          "related",
+          "usage",
+          "versions",
+          "latencyMs"
+        ],
+        "additionalProperties": false
+      },
+      "ChatBlock": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ContactCard"
+              },
+              "email": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "links": {
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatContactLink"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "email",
+              "links"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ExperienceCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "organization": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "startedOn": {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              "endedOn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "technologies": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "organization",
+              "startedOn",
+              "endedOn",
+              "summary",
+              "technologies",
+              "href"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ServiceCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "summary",
+              "href"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ExplorationCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "built",
+                  "tested",
+                  "designed"
+                ],
+                "description": "The exploration's stored status; never shown stronger than stored."
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "summary",
+              "status",
+              "href"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "RoadmapCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "summary",
+              "href"
+            ]
+          }
+        ],
+        "type": "object"
+      },
+      "ChatContactLink": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ]
+      },
+      "ChatSource": {
+        "type": "object",
+        "properties": {
+          "record": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "person",
+                  "experience",
+                  "project",
+                  "exploration",
+                  "service",
+                  "technology_group",
+                  "roadmap_item"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "href": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+            "description": "A path on this site with an optional anchor, such as `/experience#…`."
+          }
+        },
+        "required": [
+          "record",
+          "title",
+          "href"
+        ]
+      },
+      "ChatRelatedLink": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              },
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "href"
+        ]
+      },
+      "ChatCompactionResult": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "compacted",
+              "unchanged",
+              "failed"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatContextSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kept": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "summaryTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1500
+          },
+          "nextInputTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The estimate of the working context the next question carries (summary and kept exchanges only); `null` when not measured."
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "costUsd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "costUncertain": {
+                "type": "boolean"
+              },
+              "inputTokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "outputTokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "modelAttempts": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "costUsd",
+              "costUncertain",
+              "inputTokens",
+              "outputTokens",
+              "modelAttempts"
+            ],
+            "additionalProperties": false
+          },
+          "versions": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "latencyMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "grant",
+          "outcome",
+          "reason",
+          "summary",
+          "kept",
+          "summaryTokens",
+          "nextInputTokens",
+          "usage",
+          "versions",
+          "latencyMs"
+        ],
+        "additionalProperties": false
+      },
+      "ChatContextSummary": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "cs"
+            ]
+          },
+          "goals": {
+            "default": [],
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "openQuestions": {
+            "default": [],
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "covered": {
+            "default": [],
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "visitorClaims": {
+            "default": [],
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "references": {
+            "default": [],
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatSummaryReference"
+            }
+          }
+        },
+        "required": [
+          "language"
+        ],
+        "additionalProperties": false
+      },
+      "ChatSummaryReference": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "contact",
+              "experience",
+              "project",
+              "exploration",
+              "service",
+              "education",
+              "current_focus",
+              "roadmap",
+              "roadmap_area",
+              "roadmap_module",
+              "diary_day",
+              "statistics",
+              "book",
+              "event"
+            ]
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "title": {
+            "default": "",
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "kind",
+          "recordId"
+        ],
+        "additionalProperties": false
+      },
+      "ChatTelemetryRegistration": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "traceId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        },
+        "required": [
+          "grant",
+          "traceId"
+        ],
+        "additionalProperties": false
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -16328,7 +18884,14 @@
                   "internal_error",
                   "provider_unavailable",
                   "budget_exhausted",
-                  "unavailable"
+                  "unavailable",
+                  "forbidden",
+                  "chat_request_conflict",
+                  "chat_busy",
+                  "chat_challenge_failed",
+                  "chat_quota_exceeded",
+                  "chat_budget_exhausted",
+                  "chat_not_retryable"
                 ]
               },
               "message": {
@@ -20995,6 +23558,1166 @@
         ],
         "additionalProperties": false,
         "description": "A passage of an approved supplemental document: a label, never a link."
+      },
+      "ChatConversation": {
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "messages": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `before` to read older messages; `null` when there are none."
+          },
+          "activeOperation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retentionDays": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The conversation is deleted this many days after its last activity."
+          }
+        },
+        "required": [
+          "conversationId",
+          "messages",
+          "nextCursor",
+          "activeOperation",
+          "retentionDays"
+        ],
+        "additionalProperties": false
+      },
+      "ChatMessage": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatUserMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ChatAssistantMessage"
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "role",
+          "mapping": {
+            "user": "#/components/schemas/ChatUserMessage",
+            "assistant": "#/components/schemas/ChatAssistantMessage"
+          }
+        }
+      },
+      "ChatUserMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "role": {
+            "type": "string",
+            "const": "user"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "requestId",
+          "text",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ChatAssistantMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "role": {
+            "type": "string",
+            "const": "assistant"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "completed",
+              "failed",
+              "interrupted",
+              "cancelled"
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "answered",
+                  "insufficient_evidence",
+                  "refused",
+                  "unavailable"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "invalid_request",
+                      "rate_limited",
+                      "unavailable",
+                      "timeout",
+                      "invalid_stream",
+                      "internal",
+                      "cancelled"
+                    ]
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "retryable"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blocks": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatBlockOutput"
+            }
+          },
+          "sources": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatSourceOutput"
+            }
+          },
+          "related": {
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatRelatedLinkOutput"
+            }
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The main model this answer was admitted for; kept after a configuration change. `null` when none was recorded."
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reasoning effort this answer was admitted for; `null` when none was recorded."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "requestId",
+          "status",
+          "outcome",
+          "error",
+          "text",
+          "blocks",
+          "sources",
+          "related",
+          "model",
+          "effort",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ChatOperation": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "answer",
+              "compaction"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "completed",
+              "failed",
+              "interrupted",
+              "cancelled"
+            ]
+          },
+          "deadlineAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "description": "The absolute deadline; it is never extended."
+          },
+          "assistantMessageId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The answer this operation fills; `null` for a compaction."
+          },
+          "compaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatOperationCompaction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A compaction's reported outcome; `null` for an answer and before a compaction reports."
+          }
+        },
+        "required": [
+          "operationId",
+          "requestId",
+          "kind",
+          "status",
+          "deadlineAt",
+          "assistantMessageId",
+          "compaction"
+        ],
+        "additionalProperties": false
+      },
+      "ChatOperationCompaction": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "compacted",
+              "unchanged",
+              "failed"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "outcome",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "ChatConversationCleared": {
+        "type": "object",
+        "properties": {
+          "cleared": {
+            "type": "boolean"
+          },
+          "conversation": {
+            "$ref": "#/components/schemas/ChatConversation"
+          },
+          "telemetryDeletion": {
+            "type": "string",
+            "enum": [
+              "none",
+              "pending"
+            ]
+          }
+        },
+        "required": [
+          "cleared",
+          "conversation",
+          "telemetryDeletion"
+        ],
+        "additionalProperties": false
+      },
+      "ChatCompactionResponse": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatCompactionStarted"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompactionNoop"
+          }
+        ],
+        "type": "object",
+        "discriminator": {
+          "propertyName": "status",
+          "mapping": {
+            "started": "#/components/schemas/ChatCompactionStarted",
+            "noop": "#/components/schemas/ChatCompactionNoop"
+          }
+        }
+      },
+      "ChatCompactionStarted": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "started"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ChatOperation"
+          }
+        },
+        "required": [
+          "status",
+          "operation"
+        ],
+        "additionalProperties": false
+      },
+      "ChatCompactionNoop": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "noop"
+          },
+          "reason": {
+            "type": "string",
+            "const": "nothing_to_compact",
+            "description": "The working context is already small; nothing was billed or counted."
+          }
+        },
+        "required": [
+          "status",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "ChatUsage": {
+        "type": "object",
+        "properties": {
+          "serverTime": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "description": "The server's time the snapshot was read at."
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            },
+            "required": [
+              "name",
+              "effort"
+            ],
+            "additionalProperties": false,
+            "description": "The server-configured main model and effort; read-only."
+          },
+          "rollingTwoHours": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "percent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "nextReleaseAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "When the oldest counted operation leaves the rolling window; `null` when none counts."
+              }
+            },
+            "required": [
+              "used",
+              "limit",
+              "percent",
+              "nextReleaseAt"
+            ],
+            "additionalProperties": false
+          },
+          "utcDay": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "percent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "resetsAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "description": "The next UTC midnight, when the day resets."
+              }
+            },
+            "required": [
+              "used",
+              "limit",
+              "percent",
+              "resetsAt"
+            ],
+            "additionalProperties": false
+          },
+          "activeOperation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restriction": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "minute",
+                      "two_hours",
+                      "day",
+                      "shared_network",
+                      "service_budget"
+                    ]
+                  },
+                  "retryAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "retryAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why a new question would be refused now and when it may pass again; `null` when it would pass these limits."
+          },
+          "context": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "measured"
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "measuredAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "estimatedInputTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "The tokenizer estimate of the last main call's serialized input."
+                  },
+                  "reportedInputTokens": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The input tokens the provider reported for that call; `null` if none."
+                  },
+                  "capTokens": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "The input-token cap that call was sent under."
+                  }
+                },
+                "required": [
+                  "status",
+                  "operationId",
+                  "measuredAt",
+                  "estimatedInputTokens",
+                  "reportedInputTokens",
+                  "capTokens"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "unavailable"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "The conversation's last main model call: its serialized input against the effective cap.",
+            "type": "object"
+          },
+          "nextRequest": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "estimated"
+                  },
+                  "historyTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "The estimated tokens of the working context after the compaction: the summary and the kept exchanges, never the question, the instructions or tool results."
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "description": "The compaction that measured it."
+                  },
+                  "measuredAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  }
+                },
+                "required": [
+                  "status",
+                  "historyTokens",
+                  "operationId",
+                  "measuredAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "unavailable"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "A post-compaction estimate of the history the next request carries; future tool tokens are unknown and never claimed. `unavailable` unless the latest measured operation was a compaction.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "serverTime",
+          "model",
+          "rollingTwoHours",
+          "utcDay",
+          "activeOperation",
+          "restriction",
+          "context",
+          "nextRequest"
+        ],
+        "additionalProperties": false
+      },
+      "ChatGrantClaimed": {
+        "type": "object",
+        "properties": {
+          "claimed": {
+            "type": "boolean",
+            "const": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "answer",
+              "compaction"
+            ],
+            "description": "Whether the grant is for an answer or a compaction; the other is refused."
+          },
+          "deadlineAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "allowanceUsd": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reasoning effort bound at admission; `null` for an operation admitted without one."
+          },
+          "pricingVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "contextRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "claimed",
+          "kind",
+          "deadlineAt",
+          "allowanceUsd",
+          "model",
+          "effort",
+          "pricingVersion",
+          "contextRevision"
+        ],
+        "additionalProperties": false
+      },
+      "ChatTelemetryRegistered": {
+        "type": "object",
+        "properties": {
+          "traceId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "export": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "refused"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "traceId",
+          "export",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "ChatBlockOutput": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ContactCard"
+              },
+              "email": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "links": {
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChatContactLinkOutput"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "email",
+              "links"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ExperienceCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "organization": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "startedOn": {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              "endedOn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "technologies": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "organization",
+              "startedOn",
+              "endedOn",
+              "summary",
+              "technologies",
+              "href"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ServiceCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "summary",
+              "href"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ExplorationCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "built",
+                  "tested",
+                  "designed"
+                ],
+                "description": "The exploration's stored status; never shown stronger than stored."
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "summary",
+              "status",
+              "href"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "RoadmapCard"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "summary",
+              "href"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "type": "object"
+      },
+      "ChatContactLinkOutput": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "ChatSourceOutput": {
+        "type": "object",
+        "properties": {
+          "record": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "person",
+                  "experience",
+                  "project",
+                  "exploration",
+                  "service",
+                  "technology_group",
+                  "roadmap_item"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "href": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+            "description": "A path on this site with an optional anchor, such as `/experience#…`."
+          }
+        },
+        "required": [
+          "record",
+          "title",
+          "href"
+        ],
+        "additionalProperties": false
+      },
+      "ChatRelatedLinkOutput": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^\\/(?!\\/)[^\\s\\\\\\p{Cc}]*$",
+                "description": "A path on this site with an optional anchor, such as `/experience#…`."
+              },
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              }
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "href"
+        ],
+        "additionalProperties": false
       }
     },
     "securitySchemes": {
@@ -21002,6 +24725,11 @@
         "type": "http",
         "scheme": "bearer",
         "description": "An API key created with the `api-keys` command of the API package."
+      },
+      "controlToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The AI service's control token (`API_AI_CONTROL_TOKEN`), accepted on the internal chat control routes only; no API key is accepted there and the token is accepted nowhere else."
       }
     }
   }

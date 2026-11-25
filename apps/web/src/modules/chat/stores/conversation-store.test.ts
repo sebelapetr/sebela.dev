@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ChatSubmission } from "@sebela/contracts";
+import type {
+  ChatAssistantMessage,
+  ChatCompactionResponse,
+  ChatMessage,
+  ChatOperation,
+  ChatUserMessage,
+} from "@sebela/contracts";
 
-import type { ChatAdapter } from "../types/adapter";
+import { ChatAdmissionError } from "../data/admission";
+import type { ChatAdapter, ChatQuestion } from "../types/adapter";
 import {
   createConversationStore,
   createMemoryStorage,
@@ -11,11 +18,17 @@ import {
 } from "./conversation-store";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const CONVERSATION = "0c0c0c0c-0000-4000-8000-000000000001";
+const OPERATION = "22222222-0000-4000-8000-000000000001";
 const MESSAGE = "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f";
+const CREATED = "2026-11-20T10:00:00.000Z";
+
+const storedId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const storedRequest = (n: number) => `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 function sequentialIds(): () => string {
   let next = 0;
-  return () => `00000000-0000-4000-8000-${String(next++).padStart(12, "0")}`;
+  return () => `aaaaaaaa-0000-4000-8000-${String(next++).padStart(12, "0")}`;
 }
 
 /** A stream the test feeds by hand. */
@@ -58,34 +71,103 @@ function channel() {
 type Channel = ReturnType<typeof channel>;
 
 interface Sent {
-  readonly submission: ChatSubmission;
+  readonly question: ChatQuestion;
+  /** The retry ID of an explicit retry; null for a question sent or followed. */
+  readonly retryId: string | null;
+  readonly signal: AbortSignal;
+  readonly stream: Channel;
+}
+
+interface Pending<T> {
+  resolve(value: T): void;
+  reject(error: Error): void;
+}
+
+interface Restore extends Pending<unknown> {
+  readonly before: string | null;
+}
+
+interface Stop extends Pending<"stopped" | "none"> {
+  readonly requestId: string;
+}
+
+interface Clear extends Pending<unknown> {
+  readonly conversationId: string;
+}
+
+interface Compact extends Pending<ChatCompactionResponse> {
+  readonly requestId: string;
+}
+
+interface Watch {
+  readonly operationId: string;
   readonly signal: AbortSignal;
   readonly stream: Channel;
 }
 
 function manualAdapter() {
   const sent: Sent[] = [];
+  const restores: Restore[] = [];
+  const stops: Stop[] = [];
+  const clears: Clear[] = [];
+  const compacts: Compact[] = [];
+  const watches: Watch[] = [];
   const adapter: ChatAdapter = {
-    send(submission, { signal }) {
+    restore({ before }) {
+      return new Promise((resolve, reject) => {
+        restores.push({ before: before ?? null, resolve, reject });
+      });
+    },
+    send(question, { signal }) {
       const stream = channel();
-      sent.push({ submission, signal, stream });
+      sent.push({ question, retryId: null, signal, stream });
+      return stream.iterable;
+    },
+    retry(question, { retryId, signal }) {
+      const stream = channel();
+      sent.push({ question, retryId, signal, stream });
+      return stream.iterable;
+    },
+    stop(requestId) {
+      return new Promise((resolve, reject) => {
+        stops.push({ requestId, resolve, reject });
+      });
+    },
+    clear(conversationId) {
+      return new Promise((resolve, reject) => {
+        clears.push({ conversationId, resolve, reject });
+      });
+    },
+    compact(requestId) {
+      return new Promise((resolve, reject) => {
+        compacts.push({ requestId, resolve, reject });
+      });
+    },
+    watch(operation, { signal }) {
+      const stream = channel();
+      watches.push({ operationId: operation.operationId, signal, stream });
       return stream.iterable;
     },
   };
-  return { adapter, sent };
+  return { adapter, sent, restores, stops, clears, compacts, watches };
 }
 
-function setup(storage: ChatStorage = createMemoryStorage()) {
-  const { adapter, sent } = manualAdapter();
-  const store = createConversationStore({ adapter, storage, createId: sequentialIds() });
-  return { store, sent, storage };
-}
-
-/** A new store over the storage, with the conversation opened, as a reload sees it. */
-function setupAndOpen(storage: ChatStorage, id: string) {
-  const { store } = setup(storage);
-  store.open(id);
-  return store.getSnapshot();
+function setup(
+  storage: ChatStorage = createMemoryStorage(),
+  idleTimeoutMs?: number,
+  available?: boolean,
+) {
+  const { adapter, sent, restores, stops, clears, compacts, watches } = manualAdapter();
+  const onChange = vi.fn();
+  const store = createConversationStore({
+    adapter,
+    storage,
+    createId: sequentialIds(),
+    onChange,
+    ...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
+    ...(available === undefined ? {} : { available }),
+  });
+  return { store, sent, restores, stops, clears, compacts, watches, storage, onChange };
 }
 
 /** The item at the index, which the test expects to exist. */
@@ -95,18 +177,68 @@ function at<T>(items: readonly T[], index: number): T {
   return item;
 }
 
-/** A value the test expects to be there. */
-function present<T>(value: T | null): T {
-  if (value === null) throw new Error("expected a value");
-  return value;
-}
-
 const flush = async () => {
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+function user(n: number, text: string): ChatUserMessage {
+  return {
+    id: storedId(n * 2),
+    role: "user",
+    requestId: storedRequest(n),
+    text,
+    createdAt: CREATED,
+  };
+}
+
+function answered(n: number, text: string): ChatAssistantMessage {
+  return {
+    id: storedId(n * 2 + 1),
+    role: "assistant",
+    requestId: storedRequest(n),
+    status: "completed",
+    outcome: "answered",
+    error: null,
+    text,
+    blocks: [],
+    sources: [],
+    related: [],
+    model: "fictional-model",
+    effort: "medium",
+    createdAt: CREATED,
+  };
+}
+
+function pending(n: number): ChatAssistantMessage {
+  return { ...answered(n, ""), status: "pending", outcome: null, text: null };
+}
+
+function page(
+  messages: readonly ChatMessage[],
+  fields: { nextCursor?: string | null; activeOperation?: unknown; retentionDays?: number } = {},
+) {
+  return {
+    conversationId: CONVERSATION,
+    messages,
+    nextCursor: null,
+    activeOperation: null,
+    retentionDays: 730,
+    ...fields,
+  };
+}
+
+const emptyPage = page([]);
+
+/** Opens the store and lets it read an empty conversation. */
+async function openEmpty(context: ReturnType<typeof setup>, handOffId: string | null = null) {
+  const opened = context.store.open(handOffId);
+  at(context.restores, 0).resolve(emptyPage);
+  await flush();
+  return opened;
+}
+
 function event(sent: Sent, eventId: number, fields: Record<string, unknown>) {
-  return { requestId: sent.submission.requestId, messageId: MESSAGE, eventId, ...fields };
+  return { requestId: sent.question.requestId, messageId: MESSAGE, eventId, ...fields };
 }
 
 /** Answers a sent question completely. */
@@ -118,691 +250,1209 @@ async function answer(sent: Sent, text = "A fictional answer.") {
   await flush();
 }
 
-describe("a conversation store", () => {
-  it("opens an empty conversation without an address", () => {
-    const { store, sent } = setup();
-    store.open(null);
+describe("opening the conversation", () => {
+  it("is loading until the caller's conversation is read, refusing a question meanwhile", () => {
+    const context = setup();
 
-    expect(store.getSnapshot()).toEqual({ conversationId: null, turns: [], busy: false });
-    expect(sent).toHaveLength(0);
-  });
+    void context.store.open(null);
 
-  it("sends a trimmed question once, under a new random conversation and request", () => {
-    const { store, sent } = setup();
-    store.open(null);
-
-    expect(store.submit("  What is Casey Morrow working on now?  ")).toBe("sent");
-
-    expect(sent).toHaveLength(1);
-    const { submission } = at(sent, 0);
-    expect(submission.question).toBe("What is Casey Morrow working on now?");
-    expect(submission.conversationId).toMatch(UUID);
-    expect(submission.requestId).toMatch(UUID);
-    expect(submission.requestId).not.toBe(submission.conversationId);
-    expect(store.getSnapshot()).toMatchObject({
-      conversationId: submission.conversationId,
+    expect(context.store.getSnapshot()).toMatchObject({
+      history: "loading",
       busy: true,
-      turns: [{ question: "What is Casey Morrow working on now?", status: "pending" }],
+      turns: [],
     });
+    expect(context.store.submit("Q?")).toBe("busy");
+    expect(context.sent).toHaveLength(0);
   });
 
-  it("refuses a second question while one is pending", () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("First?");
+  it("shows the stored questions and answers with the storage period", async () => {
+    const context = setup();
 
-    expect(store.submit("Second?")).toBe("busy");
-    expect(sent).toHaveLength(1);
-    expect(store.getSnapshot().turns).toHaveLength(1);
-  });
+    const opened = context.store.open(null);
+    at(context.restores, 0).resolve(
+      page([user(1, "What does Ilsa build?"), answered(1, "Fictional systems.")], {
+        retentionDays: 30,
+      }),
+    );
 
-  it.each([[""], ["   "], ["x".repeat(1001)]])("refuses an invalid question %#", (question) => {
-    const { store, sent } = setup();
-    store.open(null);
-
-    expect(store.submit(question)).toBe("invalid");
-    expect(sent).toHaveLength(0);
-  });
-
-  it("streams the answer into the turn and accepts the next question once complete", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("First?");
-    await answer(at(sent, 0));
-
-    expect(store.getSnapshot()).toMatchObject({
+    await expect(opened).resolves.toEqual({ kind: "shown" });
+    expect(context.store.getSnapshot()).toMatchObject({
+      history: "ready",
       busy: false,
-      turns: [{ status: "complete", text: "A fictional answer.", outcome: "answered" }],
+      retentionDays: 30,
+      earlier: "none",
+      turns: [
+        { requestId: storedRequest(1), question: "What does Ilsa build?", status: "complete" },
+      ],
     });
-    expect(store.submit("Second?")).toBe("sent");
-    expect(sent[1]?.submission.conversationId).toBe(sent[0]?.submission.conversationId);
+    expect(context.sent).toHaveLength(0);
+  });
+
+  it.each([
+    ["a page the contract does not allow", { conversationId: "nope" }],
+    ["a failed read", new Error("unavailable")],
+  ])(
+    "says the history could not be read after %s, still taking a question",
+    async (_name, result) => {
+      const context = setup();
+
+      const opened = context.store.open(null);
+      if (result instanceof Error) at(context.restores, 0).reject(result);
+      else at(context.restores, 0).resolve(result);
+      await opened;
+
+      expect(context.store.getSnapshot()).toMatchObject({
+        history: "failed",
+        busy: false,
+        turns: [],
+      });
+      expect(context.store.submit("Q?")).toBe("sent");
+    },
+  );
+
+  it("reads the conversation once, however often the page opens it", async () => {
+    const context = setup();
+
+    await openEmpty(context);
+    await context.store.open(null);
+
+    expect(context.restores).toHaveLength(1);
+  });
+
+  it("follows the answer still being prepared, without asking again (reload recovery)", async () => {
+    const context = setup();
+    const opened = context.store.open(null);
+    at(context.restores, 0).resolve(
+      page([user(1, "Q?"), pending(1)], {
+        activeOperation: {
+          operationId: OPERATION,
+          requestId: storedRequest(1),
+          status: "running",
+          deadlineAt: "2026-11-20T10:01:00.000Z",
+          assistantMessageId: storedId(3),
+          kind: "answer",
+          compaction: null,
+        },
+      }),
+    );
+    await opened;
+
+    expect(context.sent).toHaveLength(1);
+    expect(at(context.sent, 0).question).toEqual({ requestId: storedRequest(1), question: "Q?" });
+    expect(context.store.getSnapshot().busy).toBe(true);
+
+    await answer(at(context.sent, 0), "Recovered once.");
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      turns: [{ requestId: storedRequest(1), status: "complete", text: "Recovered once." }],
+    });
+    expect(context.sent).toHaveLength(1);
+  });
+});
+
+describe("a website without the chat", () => {
+  it("asks the API nothing and refuses every question", async () => {
+    const context = setup(createMemoryStorage(), undefined, false);
+
+    await expect(context.store.open(null)).resolves.toEqual({ kind: "shown" });
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      history: "unavailable",
+      busy: true,
+      turns: [],
+      retentionDays: null,
+      earlier: "none",
+    });
+    expect(context.store.submit("Q?")).toBe("busy");
+    expect(context.restores).toHaveLength(0);
+    expect(context.sent).toHaveLength(0);
+  });
+
+  it("gives the hero's question back instead of sending it", async () => {
+    const context = setup(createMemoryStorage(), undefined, false);
+    const id = handOffQuestion(context.storage, "What does Ilsa build?", sequentialIds());
+
+    await expect(context.store.open(id)).resolves.toEqual({
+      kind: "held",
+      question: "What does Ilsa build?",
+    });
+    expect(context.restores).toHaveLength(0);
+    expect(context.sent).toHaveLength(0);
+  });
+});
+
+describe("earlier messages", () => {
+  it("reads the page before the oldest shown, pairing the answer the newer page began with", async () => {
+    const context = setup();
+    const opened = context.store.open(null);
+    at(context.restores, 0).resolve(
+      page([answered(1, "Older answer."), user(2, "Newer?"), answered(2, "Newer answer.")], {
+        nextCursor: storedId(3),
+      }),
+    );
+    await opened;
+    expect(context.store.getSnapshot()).toMatchObject({
+      earlier: "available",
+      turns: [{ requestId: storedRequest(2) }],
+    });
+
+    const earlier = context.store.loadEarlier();
+    expect(context.store.getSnapshot().earlier).toBe("loading");
+    expect(at(context.restores, 1).before).toBe(storedId(3));
+    at(context.restores, 1).resolve(page([user(1, "Older?")]));
+    await earlier;
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      earlier: "none",
+      turns: [
+        { requestId: storedRequest(1), question: "Older?", text: "Older answer." },
+        { requestId: storedRequest(2), text: "Newer answer." },
+      ],
+    });
+  });
+
+  it("keeps the earlier messages available when they cannot be read", async () => {
+    const context = setup();
+    const opened = context.store.open(null);
+    at(context.restores, 0).resolve(page([user(2, "Newer?")], { nextCursor: storedId(4) }));
+    await opened;
+
+    const earlier = context.store.loadEarlier();
+    at(context.restores, 1).reject(new Error("unavailable"));
+    await earlier;
+
+    expect(context.store.getSnapshot()).toMatchObject({ earlier: "available", turns: [{}] });
+  });
+});
+
+describe("asking a question", () => {
+  it("sends a trimmed question once under a new random request", async () => {
+    const context = setup();
+    await openEmpty(context);
+
+    expect(context.store.submit("  What does Ilsa build?  ")).toBe("sent");
+
+    expect(context.sent).toHaveLength(1);
+    expect(at(context.sent, 0).question.question).toBe("What does Ilsa build?");
+    expect(at(context.sent, 0).question.requestId).toMatch(UUID);
+    expect(context.store.getSnapshot().busy).toBe(true);
+  });
+
+  it("refuses an empty or too long question", async () => {
+    const context = setup();
+    await openEmpty(context);
+
+    expect(context.store.submit("   ")).toBe("invalid");
+    expect(context.store.submit("x".repeat(1001))).toBe("invalid");
+    expect(context.sent).toHaveLength(0);
+  });
+
+  it("refuses a second question while one is answering", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("First?");
+
+    expect(context.store.submit("Second?")).toBe("busy");
+    expect(context.sent).toHaveLength(1);
+  });
+
+  it("streams the answer in, ignoring signs of life, and takes the next question once complete", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const sent = at(context.sent, 0);
+
+    sent.stream.push(event(sent, 0, { type: "start" }));
+    sent.stream.push({
+      type: "progress",
+      requestId: sent.question.requestId,
+      stage: "answering",
+      elapsedMs: 4000,
+    });
+    await answer(sent, "Fictional.");
+
+    expect(at(context.store.getSnapshot().turns, 0)).toMatchObject({
+      status: "complete",
+      text: "Fictional.",
+    });
+    expect(context.store.submit("Next?")).toBe("sent");
   });
 
   it("marks a stream that ends without its terminal event as interrupted", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    at(sent, 0).stream.push(event(at(sent, 0), 0, { type: "start" }));
-    at(sent, 0).stream.push(event(at(sent, 0), 1, { type: "text_delta", text: "Partial" }));
-    at(sent, 0).stream.end();
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const sent = at(context.sent, 0);
+
+    sent.stream.push(event(sent, 0, { type: "start" }));
+    sent.stream.end();
     await flush();
 
-    expect(store.getSnapshot()).toMatchObject({
+    expect(context.store.getSnapshot()).toMatchObject({
       busy: false,
-      turns: [{ status: "interrupted", text: "Partial" }],
+      turns: [{ status: "interrupted" }],
     });
   });
 
-  it("marks a transport that fails as interrupted, keeping the question", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    at(sent, 0).stream.fail(new TypeError("network down"));
+  it("fails a question the API did not admit with its reason, showing no answer", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+
+    at(context.sent, 0).stream.fail(new ChatAdmissionError("quota_exceeded", 120));
     await flush();
 
-    expect(store.getSnapshot()).toMatchObject({
+    expect(context.store.getSnapshot()).toMatchObject({
       busy: false,
-      turns: [{ question: "Q?", status: "interrupted" }],
+      turns: [
+        {
+          status: "failed",
+          text: "",
+          error: { code: "quota_exceeded", retryable: true, retryAfterSeconds: 120 },
+        },
+      ],
     });
+  });
+
+  it("interrupts the answer when the transport throws as it is called", async () => {
+    const context = setup();
+    const adapter: ChatAdapter = {
+      ...manualAdapter().adapter,
+      restore: () => Promise.resolve(emptyPage),
+      send() {
+        throw new Error("cannot connect");
+      },
+    };
+    const store = createConversationStore({
+      adapter,
+      storage: context.storage,
+      createId: sequentialIds(),
+    });
+    await store.open(null);
+
+    expect(store.submit("Q?")).toBe("sent");
+    await flush();
+
+    expect(store.getSnapshot()).toMatchObject({ busy: false, turns: [{ status: "interrupted" }] });
   });
 
   it("notifies subscribers of every change until they unsubscribe", async () => {
-    const { store, sent } = setup();
-    let calls = 0;
-    const unsubscribe = store.subscribe(() => {
-      calls += 1;
-    });
-    store.open(null);
-    store.submit("Q?");
-    const afterSubmit = calls;
-    expect(afterSubmit).toBeGreaterThan(0);
+    const context = setup();
+    await openEmpty(context);
+    const listener = vi.fn();
+    const unsubscribe = context.store.subscribe(listener);
 
+    context.store.submit("Q?");
+    expect(listener).toHaveBeenCalled();
     unsubscribe();
-    await answer(at(sent, 0));
-    expect(calls).toBe(afterSubmit);
+    listener.mockClear();
+    await answer(at(context.sent, 0));
+
+    expect(listener).not.toHaveBeenCalled();
   });
 
-  it("keeps the snapshot stable while nothing changes", () => {
-    const { store } = setup();
-    store.open(null);
+  it("keeps the snapshot stable while nothing changes", async () => {
+    const context = setup();
+    await openEmpty(context);
 
-    expect(store.getSnapshot()).toBe(store.getSnapshot());
-  });
-
-  it("opens an unknown conversation address empty, without sending anything", () => {
-    const { store, sent } = setup();
-    store.open("7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6");
-
-    expect(store.getSnapshot()).toEqual({
-      conversationId: "7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6",
-      turns: [],
-      busy: false,
-    });
-    expect(sent).toHaveLength(0);
-  });
-
-  it("starts a new chat: cancels the active request, clears the turns and the address", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    at(sent, 0).stream.push(event(at(sent, 0), 0, { type: "start" }));
-    await flush();
-
-    store.newChat();
-
-    expect(at(sent, 0).signal.aborted).toBe(true);
-    expect(store.getSnapshot()).toEqual({ conversationId: null, turns: [], busy: false });
-
-    at(sent, 0).stream.push(event(at(sent, 0), 1, { type: "text_delta", text: "Late" }));
-    at(sent, 0).stream.end();
-    await flush();
-    expect(store.getSnapshot()).toEqual({ conversationId: null, turns: [], busy: false });
-  });
-
-  it("forgets the cleared conversation in this tab", async () => {
-    const storage = createMemoryStorage();
-    const { store, sent } = setup(storage);
-    store.open(null);
-    store.submit("Q?");
-    await answer(at(sent, 0));
-    const id = present(store.getSnapshot().conversationId);
-
-    store.newChat();
-    const reopened = setup(storage);
-    reopened.store.open(id);
-
-    expect(reopened.store.getSnapshot().turns).toEqual([]);
-  });
-
-  it("cancels the active request when another conversation is opened", () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-
-    store.open("7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6");
-
-    expect(at(sent, 0).signal.aborted).toBe(true);
-    expect(store.getSnapshot().turns).toEqual([]);
+    expect(context.store.getSnapshot()).toBe(context.store.getSnapshot());
   });
 });
 
 describe("the hero's hand-off", () => {
-  it("gives a random conversation address that does not carry the question", () => {
+  it("gives a random address that does not carry the question", () => {
     const storage = createMemoryStorage();
-    const question = "What is Casey Morrow working on now?";
-    const id = handOffQuestion(storage, question, sequentialIds());
+
+    const id = handOffQuestion(storage, "  What does Ilsa build?  ", sequentialIds());
 
     expect(id).toMatch(UUID);
-    expect(id).not.toContain("Casey");
+    expect(id).not.toContain("Ilsa");
   });
 
-  it("refuses an empty question", () => {
-    expect(handOffQuestion(createMemoryStorage(), "   ", sequentialIds())).toBeNull();
-  });
-
-  it("sends the handed-off question exactly once when its conversation opens", async () => {
-    const storage = createMemoryStorage();
-    const id = present(handOffQuestion(storage, "  Q from the hero?  ", () => crypto.randomUUID()));
-    const { store, sent } = setup(storage);
-
-    // It says it sent the question, so the page can bring the question into view as it would for
-    // one asked on the page; opening it again only shows it.
-    expect(store.open(id)).toBe("sent");
-    expect(store.open(id)).toBe("shown");
-
-    expect(sent).toHaveLength(1);
-    expect(sent[0]?.submission).toMatchObject({ conversationId: id, question: "Q from the hero?" });
-    await answer(at(sent, 0));
-    expect(store.getSnapshot().turns).toHaveLength(1);
-  });
-
-  it("does not send it again when the page is opened again (back, forward, reload)", async () => {
-    const storage = createMemoryStorage();
-    const id = present(handOffQuestion(storage, "Q from the hero?", () => crypto.randomUUID()));
-    const first = setup(storage);
-    first.store.open(id);
-    await answer(at(first.sent, 0), "Kept.");
-
-    const second = setup(storage);
-    expect(second.store.open(id)).toBe("shown");
-
-    expect(second.sent).toHaveLength(0);
-    expect(second.store.getSnapshot()).toMatchObject({
-      conversationId: id,
-      busy: false,
-      turns: [{ question: "Q from the hero?", status: "complete", text: "Kept." }],
-    });
-  });
-
-  it("restores an answer that was still streaming as interrupted, never resending it", async () => {
-    const storage = createMemoryStorage();
-    const id = present(handOffQuestion(storage, "Q?", () => crypto.randomUUID()));
-    const first = setup(storage);
-    first.store.open(id);
-    at(first.sent, 0).stream.push(event(at(first.sent, 0), 0, { type: "start" }));
-    at(first.sent, 0).stream.push(
-      event(at(first.sent, 0), 1, { type: "text_delta", text: "Half" }),
-    );
-    await flush();
-
-    const second = setup(storage);
-    expect(second.store.open(id)).toBe("shown");
-
-    expect(second.sent).toHaveLength(0);
-    expect(second.store.getSnapshot()).toMatchObject({
-      busy: false,
-      turns: [{ status: "interrupted", text: "Half" }],
-    });
-  });
-
-  it("opens a conversation whose stored block was tampered with as empty, showing none of it", async () => {
-    const storage = createMemoryStorage();
-    const first = setup(storage);
-    first.store.submit("Q?");
-    const sent = at(first.sent, 0);
-    const block = {
-      type: "ServiceCard",
-      title: "Fictional automation",
-      summary: "Made up.",
-      href: "/services#service-automation",
+  it("refuses an empty question and a storage that cannot be written", () => {
+    const blocked: ChatStorage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => undefined,
     };
-    sent.stream.push(event(sent, 0, { type: "start" }));
-    sent.stream.push(event(sent, 1, { type: "block", block }));
-    sent.stream.push(event(sent, 2, { type: "complete", outcome: "answered" }));
-    sent.stream.end();
-    await flush();
-    const id = present(first.store.getSnapshot().conversationId);
-    const key = `sebela-chat:${id}`;
-    const stored = present(storage.getItem(key));
-    expect(setupAndOpen(storage, id).turns).toMatchObject([{ blocks: [block] }]);
 
-    storage.setItem(key, stored.replace("/services#service-automation", "javascript:alert(1)"));
-
-    expect(setupAndOpen(storage, id)).toEqual({ conversationId: id, turns: [], busy: false });
+    expect(handOffQuestion(createMemoryStorage(), "  ", sequentialIds())).toBeNull();
+    expect(handOffQuestion(blocked, "Q?", sequentialIds())).toBeNull();
   });
 
-  it("opens a conversation whose stored state is unreadable as empty", () => {
-    const storage = createMemoryStorage();
-    const id = "7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6";
-    storage.setItem(`sebela-chat:${id}`, "{not json");
-    const { store } = setup(storage);
+  it("sends the handed-off question once, after the history is read", async () => {
+    const context = setup();
+    const id = handOffQuestion(context.storage, "What does Ilsa build?", sequentialIds());
 
-    store.open(id);
+    const opened = context.store.open(id);
+    expect(context.sent).toHaveLength(0);
+    at(context.restores, 0).resolve(page([user(1, "Old?"), answered(1, "Old.")]));
 
-    expect(store.getSnapshot()).toEqual({ conversationId: id, turns: [], busy: false });
+    await expect(opened).resolves.toEqual({ kind: "sent" });
+    expect(context.sent).toHaveLength(1);
+    expect(at(context.sent, 0).question.question).toBe("What does Ilsa build?");
+    expect(context.store.getSnapshot().turns).toMatchObject([
+      { question: "Old?" },
+      { question: "What does Ilsa build?", status: "pending" },
+    ]);
+  });
+
+  it("never sends it again: not on a second open, nor from a new store after a reload", async () => {
+    const context = setup();
+    const id = handOffQuestion(context.storage, "Q?", sequentialIds());
+    await openEmpty(context, id);
+
+    await expect(context.store.open(id)).resolves.toEqual({ kind: "shown" });
+    const reloaded = setup(context.storage);
+    const opened = reloaded.store.open(id);
+    at(reloaded.restores, 0).resolve(emptyPage);
+
+    await expect(opened).resolves.toEqual({ kind: "shown" });
+    expect(context.sent).toHaveLength(1);
+    expect(reloaded.sent).toHaveLength(0);
+  });
+
+  it("holds the handed-off question while an earlier answer is still prepared", async () => {
+    const context = setup();
+    const id = handOffQuestion(context.storage, "New?", sequentialIds());
+    const opened = context.store.open(id);
+    at(context.restores, 0).resolve(
+      page([user(1, "Q?"), pending(1)], {
+        activeOperation: {
+          operationId: OPERATION,
+          requestId: storedRequest(1),
+          status: "running",
+          deadlineAt: "2026-11-20T10:01:00.000Z",
+          assistantMessageId: storedId(3),
+          kind: "answer",
+          compaction: null,
+        },
+      }),
+    );
+
+    await expect(opened).resolves.toEqual({ kind: "held", question: "New?" });
+    expect(context.sent).toHaveLength(1);
+  });
+
+  it("opens an unknown hand-off address with the caller's own conversation, sending nothing", async () => {
+    const context = setup();
+
+    const opened = context.store.open("7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6");
+    at(context.restores, 0).resolve(page([user(1, "Mine?"), answered(1, "Yours.")]));
+
+    await expect(opened).resolves.toEqual({ kind: "shown" });
+    expect(context.store.getSnapshot().turns).toMatchObject([{ question: "Mine?" }]);
+    expect(context.sent).toHaveLength(0);
+  });
+
+  it("takes a later hand-off without reading the conversation again", async () => {
+    const context = setup();
+    await openEmpty(context);
+    const id = handOffQuestion(context.storage, "Later?", sequentialIds());
+
+    await expect(context.store.open(id)).resolves.toEqual({ kind: "sent" });
+    expect(context.restores).toHaveLength(1);
+    expect(at(context.sent, 0).question.question).toBe("Later?");
   });
 });
-
-/** A store whose stream times out after the given quiet time, under fake timers. */
-function setupWithTimeout(idleTimeoutMs: number) {
-  const { adapter, sent } = manualAdapter();
-  const store = createConversationStore({
-    adapter,
-    storage: createMemoryStorage(),
-    createId: sequentialIds(),
-    idleTimeoutMs,
-  });
-  return { store, sent };
-}
-
-/** Starts an answer and ends its stream before the terminal event. */
-async function interrupt(sent: Sent, text = "Partial") {
-  sent.stream.push(event(sent, 0, { type: "start" }));
-  sent.stream.push(event(sent, 1, { type: "text_delta", text }));
-  sent.stream.end();
-  await flush();
-}
-
-/** A storage where every call throws, as a browser that blocks it. */
-const blockedStorage: ChatStorage = {
-  getItem() {
-    throw new Error("blocked");
-  },
-  setItem() {
-    throw new Error("blocked");
-  },
-  removeItem() {
-    throw new Error("blocked");
-  },
-};
 
 describe("retrying an answer", () => {
-  it("resends the interrupted question under the same request, replacing its answer in place", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    await interrupt(at(sent, 0));
-    const failedTurn = at(store.getSnapshot().turns, 0);
-
-    expect(store.retry(failedTurn.requestId)).toBe("sent");
-
-    expect(sent).toHaveLength(2);
-    expect(at(sent, 1).submission).toEqual(at(sent, 0).submission);
-    const { turns, busy } = store.getSnapshot();
-    expect(turns).toHaveLength(1);
-    expect(at(turns, 0)).toMatchObject({
-      requestId: failedTurn.requestId,
-      question: "Q?",
-      status: "pending",
-      text: "",
-      error: null,
-    });
-    expect(busy).toBe(true);
-
-    await answer(at(sent, 1), "Whole.");
-    expect(store.getSnapshot().turns).toHaveLength(1);
-    expect(at(store.getSnapshot().turns, 0)).toMatchObject({ status: "complete", text: "Whole." });
-  });
-
-  it("resends a question whose answer failed with an error that may pass", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    at(sent, 0).stream.push(
-      event(at(sent, 0), 0, { type: "error", code: "unavailable", retryable: true }),
-    );
-    await flush();
-
-    expect(store.retry(at(store.getSnapshot().turns, 0).requestId)).toBe("sent");
-    expect(sent).toHaveLength(2);
-  });
-
-  it("resends a question whose transport failed before the first event", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    at(sent, 0).stream.fail(new Error("network"));
-    await flush();
-
-    expect(store.retry(at(store.getSnapshot().turns, 0).requestId)).toBe("sent");
-    expect(sent).toHaveLength(2);
-  });
-
-  it("refuses to resend where the error says a retry cannot help", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    at(sent, 0).stream.push(
-      event(at(sent, 0), 0, { type: "error", code: "invalid_request", retryable: false }),
-    );
-    await flush();
-
-    expect(store.retry(at(store.getSnapshot().turns, 0).requestId)).toBe("not_retryable");
-    expect(sent).toHaveLength(1);
-  });
-
-  it("refuses to resend a final answer: answered, refused or unavailable", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    await answer(at(sent, 0));
-
-    expect(store.retry(at(store.getSnapshot().turns, 0).requestId)).toBe("not_retryable");
-    expect(sent).toHaveLength(1);
-  });
-
-  it("refuses to resend any but the latest question", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("First?");
-    await interrupt(at(sent, 0));
-    store.submit("Second?");
-    await answer(at(sent, 1));
-
-    expect(store.retry(at(store.getSnapshot().turns, 0).requestId)).toBe("not_retryable");
-    expect(sent).toHaveLength(2);
-  });
-
-  it("refuses a second retry while the first is answering, so a double click sends once", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    await interrupt(at(sent, 0));
-    const { requestId } = at(store.getSnapshot().turns, 0);
-
-    expect(store.retry(requestId)).toBe("sent");
-    expect(store.retry(requestId)).toBe("busy");
-    expect(sent).toHaveLength(2);
-  });
-
-  it("refuses a request the open conversation does not have, such as one cleared by New chat", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    await interrupt(at(sent, 0));
-    const { requestId } = at(store.getSnapshot().turns, 0);
-    store.newChat();
-
-    expect(store.retry(requestId)).toBe("not_retryable");
-    expect(sent).toHaveLength(1);
-  });
-
-  it("never retries by itself: an interrupted or failed answer waits for the visitor", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("First?");
-    await interrupt(at(sent, 0));
-    store.retry(at(store.getSnapshot().turns, 0).requestId);
-    at(sent, 1).stream.fail(new Error("network"));
-    await flush();
-
-    expect(sent).toHaveLength(2);
-    expect(at(store.getSnapshot().turns, 0).status).toBe("interrupted");
-  });
-
-  it("keeps the retried answer, not the failed one, for a reload", async () => {
-    const storage = createMemoryStorage();
-    const { store, sent } = setup(storage);
-    store.open(null);
-    store.submit("Q?");
-    await interrupt(at(sent, 0));
-    store.retry(at(store.getSnapshot().turns, 0).requestId);
-    await answer(at(sent, 1), "Whole.");
-
-    const reloaded = setupAndOpen(storage, present(store.getSnapshot().conversationId));
-    expect(reloaded.turns).toHaveLength(1);
-    expect(at(reloaded.turns, 0)).toMatchObject({ status: "complete", text: "Whole." });
-  });
-});
-
-describe("late and stale events", () => {
-  it("ignores what a cancelled transport still yields after New chat, even under a new chat", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("First?");
-    at(sent, 0).stream.push(event(at(sent, 0), 0, { type: "start" }));
-    await flush();
-    store.newChat();
-    store.submit("Second?");
-
-    at(sent, 0).stream.push(event(at(sent, 0), 1, { type: "text_delta", text: "Late" }));
-    at(sent, 0).stream.push(event(at(sent, 0), 2, { type: "complete", outcome: "answered" }));
-    await flush();
-
-    const { turns } = store.getSnapshot();
-    expect(turns).toHaveLength(1);
-    expect(at(turns, 0)).toMatchObject({ question: "Second?", status: "pending", text: "" });
-  });
-
-  it("ignores events of a failed attempt that arrive after its retry, though they name the same request", async () => {
-    vi.useFakeTimers();
-    try {
-      const { store, sent } = setupWithTimeout(1000);
-      store.open(null);
-      store.submit("Q?");
-      at(sent, 0).stream.push(event(at(sent, 0), 0, { type: "start" }));
-      await vi.advanceTimersByTimeAsync(1000);
-      store.retry(at(store.getSnapshot().turns, 0).requestId);
-
-      at(sent, 0).stream.push(event(at(sent, 0), 1, { type: "text_delta", text: "Stale" }));
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(at(store.getSnapshot().turns, 0)).toMatchObject({ status: "pending", text: "" });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("accepts each event once when the transport delivers it twice", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    const first = at(sent, 0);
-    for (const raw of [
-      event(first, 0, { type: "start" }),
-      event(first, 1, { type: "text_delta", text: "Once." }),
-      event(first, 2, { type: "complete", outcome: "answered" }),
-    ]) {
-      first.stream.push(raw);
-      first.stream.push(raw);
-    }
+  it("follows an interrupted question again under the same request, replacing its answer", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const first = at(context.sent, 0);
+    first.stream.push(event(first, 0, { type: "start" }));
+    first.stream.push(event(first, 1, { type: "text_delta", text: "Part" }));
     first.stream.end();
     await flush();
 
-    expect(at(store.getSnapshot().turns, 0)).toMatchObject({ status: "complete", text: "Once." });
+    expect(context.store.retry(first.question.requestId)).toBe("sent");
+
+    expect(at(context.sent, 1).question).toEqual(first.question);
+    expect(context.store.getSnapshot().turns).toMatchObject([
+      { requestId: first.question.requestId, status: "pending", text: "" },
+    ]);
   });
 
-  it("fails an answer with an unsupported payload as unreadable, keeping what came before", async () => {
-    const { store, sent } = setup();
-    store.open(null);
-    store.submit("Q?");
-    const first = at(sent, 0);
-    first.stream.push(event(first, 0, { type: "start" }));
-    first.stream.push(event(first, 1, { type: "text_delta", text: "Partial" }));
-    first.stream.push(event(first, 2, { type: "block", block: { type: "HtmlCard", html: "<b>" } }));
+  it("asks again under the same request after a question that was not admitted", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    at(context.sent, 0).stream.fail(new ChatAdmissionError("challenge_failed"));
     await flush();
 
-    expect(first.signal.aborted).toBe(true);
-    expect(store.getSnapshot()).toMatchObject({ busy: false });
-    expect(at(store.getSnapshot().turns, 0)).toMatchObject({
+    expect(context.store.retry(at(context.sent, 0).question.requestId)).toBe("sent");
+    expect(at(context.sent, 1).question).toEqual(at(context.sent, 0).question);
+  });
+
+  it("asks again under the same request and a new retry ID after the API ended the answer with a retryable error", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const first = at(context.sent, 0);
+    first.stream.push(event(first, 0, { type: "start" }));
+    first.stream.push(event(first, 1, { type: "error", code: "timeout", retryable: true }));
+    first.stream.end();
+    await flush();
+
+    expect(context.store.retry(first.question.requestId)).toBe("sent");
+
+    const second = at(context.sent, 1);
+    expect(second.question).toEqual(first.question);
+    expect(second.retryId).toMatch(UUID);
+    expect(context.store.getSnapshot().turns).toMatchObject([
+      { requestId: first.question.requestId, status: "pending" },
+    ]);
+  });
+
+  it("gives every press of retry its own retry ID", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    at(context.sent, 0).stream.fail(new ChatAdmissionError("challenge_failed"));
+    await flush();
+    const { requestId } = at(context.sent, 0).question;
+    context.store.retry(requestId);
+    at(context.sent, 1).stream.fail(new ChatAdmissionError("challenge_failed"));
+    await flush();
+    context.store.retry(requestId);
+
+    expect(at(context.sent, 1).retryId).not.toBeNull();
+    expect(at(context.sent, 2).retryId).not.toBe(at(context.sent, 1).retryId);
+  });
+
+  it("shows a retry the API no longer allows with its reason and no further retry", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    at(context.sent, 0).stream.end();
+    await flush();
+    context.store.retry(at(context.sent, 0).question.requestId);
+    at(context.sent, 1).stream.fail(new ChatAdmissionError("not_retryable"));
+    await flush();
+
+    expect(at(context.store.getSnapshot().turns, 0)).toMatchObject({
       status: "failed",
-      text: "Partial",
-      blocks: [],
-      error: { code: "invalid_stream", retryable: true },
+      error: { code: "not_retryable", retryable: false },
     });
+  });
+
+  it("refuses a final answer, an error a retry cannot help and any but the latest question", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("First?");
+    await answer(at(context.sent, 0));
+    context.store.submit("Second?");
+    at(context.sent, 1).stream.fail(new ChatAdmissionError("budget_exhausted"));
+    await flush();
+
+    expect(context.store.retry(at(context.sent, 0).question.requestId)).toBe("not_retryable");
+    expect(context.store.retry(at(context.sent, 1).question.requestId)).toBe("not_retryable");
+    expect(context.sent).toHaveLength(2);
+  });
+
+  it("refuses a second retry while the first is answering", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    at(context.sent, 0).stream.end();
+    await flush();
+    const { requestId } = at(context.sent, 0).question;
+
+    expect(context.store.retry(requestId)).toBe("sent");
+    expect(context.store.retry(requestId)).toBe("busy");
+    expect(context.sent).toHaveLength(2);
+  });
+
+  it("ignores what a replaced attempt still yields, though it names the same request", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const first = at(context.sent, 0);
+    first.stream.push(event(first, 0, { type: "start" }));
+    await flush();
+    first.stream.fail(new Error("dropped"));
+    await flush();
+    context.store.retry(first.question.requestId);
+
+    first.stream.push(event(first, 1, { type: "text_delta", text: "Stale" }));
+    await flush();
+
+    expect(at(context.store.getSnapshot().turns, 0)).toMatchObject({ status: "pending", text: "" });
   });
 });
 
 describe("an answer that goes quiet", () => {
-  it("times out after the quiet time, keeping the partial answer, and stops the transport", async () => {
+  it("times out after the quiet time, keeping the partial answer, and stops following it", async () => {
     vi.useFakeTimers();
     try {
-      const { store, sent } = setupWithTimeout(1000);
-      store.open(null);
-      store.submit("Q?");
-      at(sent, 0).stream.push(event(at(sent, 0), 0, { type: "start" }));
-      at(sent, 0).stream.push(event(at(sent, 0), 1, { type: "text_delta", text: "Partial" }));
+      const context = setup(createMemoryStorage(), 1000);
+      const opened = context.store.open(null);
+      at(context.restores, 0).resolve(emptyPage);
+      await opened;
+      context.store.submit("Q?");
+      const sent = at(context.sent, 0);
+      sent.stream.push(event(sent, 0, { type: "start" }));
+      sent.stream.push(event(sent, 1, { type: "text_delta", text: "Partial" }));
       await vi.advanceTimersByTimeAsync(999);
-      expect(at(store.getSnapshot().turns, 0).status).toBe("streaming");
+      expect(at(context.store.getSnapshot().turns, 0).status).toBe("streaming");
 
       await vi.advanceTimersByTimeAsync(1);
 
-      expect(at(sent, 0).signal.aborted).toBe(true);
-      expect(store.getSnapshot().busy).toBe(false);
-      expect(at(store.getSnapshot().turns, 0)).toMatchObject({
+      expect(sent.signal.aborted).toBe(true);
+      expect(at(context.store.getSnapshot().turns, 0)).toMatchObject({
         status: "failed",
         text: "Partial",
         error: { code: "timeout", retryable: true },
       });
-      expect(sent).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("times out an answer that never starts", async () => {
+  it("measures the quiet time from the latest sign of life", async () => {
     vi.useFakeTimers();
     try {
-      const { store } = setupWithTimeout(1000);
-      store.open(null);
-      store.submit("Q?");
-
-      await vi.advanceTimersByTimeAsync(1000);
-
-      expect(at(store.getSnapshot().turns, 0)).toMatchObject({
-        status: "failed",
-        text: "",
-        error: { code: "timeout" },
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("measures the quiet time from the latest event, not from the question", async () => {
-    vi.useFakeTimers();
-    try {
-      const { store, sent } = setupWithTimeout(1000);
-      store.open(null);
-      store.submit("Q?");
+      const context = setup(createMemoryStorage(), 1000);
+      const opened = context.store.open(null);
+      at(context.restores, 0).resolve(emptyPage);
+      await opened;
+      context.store.submit("Q?");
+      const sent = at(context.sent, 0);
       await vi.advanceTimersByTimeAsync(600);
-      at(sent, 0).stream.push(event(at(sent, 0), 0, { type: "start" }));
+      sent.stream.push({
+        type: "progress",
+        requestId: sent.question.requestId,
+        stage: "queued",
+        elapsedMs: 600,
+      });
       await vi.advanceTimersByTimeAsync(600);
 
-      expect(at(store.getSnapshot().turns, 0).status).toBe("streaming");
+      expect(at(context.store.getSnapshot().turns, 0).status).toBe("pending");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("ignores a late event after the timeout", async () => {
+  it("follows a timed-out question again under the same request", async () => {
     vi.useFakeTimers();
     try {
-      const { store, sent } = setupWithTimeout(1000);
-      store.open(null);
-      store.submit("Q?");
-      at(sent, 0).stream.push(event(at(sent, 0), 0, { type: "start" }));
+      const context = setup(createMemoryStorage(), 1000);
+      const opened = context.store.open(null);
+      at(context.restores, 0).resolve(emptyPage);
+      await opened;
+      context.store.submit("Q?");
       await vi.advanceTimersByTimeAsync(1000);
 
-      at(sent, 0).stream.push(event(at(sent, 0), 1, { type: "text_delta", text: "Late" }));
-      at(sent, 0).stream.push(event(at(sent, 0), 2, { type: "complete", outcome: "answered" }));
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(at(store.getSnapshot().turns, 0)).toMatchObject({
-        status: "failed",
-        text: "",
-        error: { code: "timeout" },
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does not time out a New chat that cleared the answer", async () => {
-    vi.useFakeTimers();
-    try {
-      const { store } = setupWithTimeout(1000);
-      store.open(null);
-      store.submit("Q?");
-      store.newChat();
-
-      await vi.advanceTimersByTimeAsync(1000);
-
-      expect(store.getSnapshot()).toEqual({ conversationId: null, turns: [], busy: false });
+      expect(context.store.retry(at(context.sent, 0).question.requestId)).toBe("sent");
+      expect(at(context.sent, 1).question).toEqual(at(context.sent, 0).question);
     } finally {
       vi.useRealTimers();
     }
   });
 });
 
-describe("a tab whose storage is blocked", () => {
-  it("still asks and answers, keeping the conversation on the page", async () => {
-    const { store, sent } = setup(blockedStorage);
-    store.open(null);
+const OTHER_CONVERSATION = "0c0c0c0c-0000-4000-8000-000000000002";
 
-    expect(store.submit("Q?")).toBe("sent");
-    await answer(at(sent, 0));
+function activeOperation(n: number) {
+  return {
+    operationId: OPERATION,
+    requestId: storedRequest(n),
+    status: "running",
+    deadlineAt: "2026-11-20T10:01:00.000Z",
+    assistantMessageId: storedId(n * 2 + 1),
+    kind: "answer",
+    compaction: null,
+  };
+}
 
-    expect(at(store.getSnapshot().turns, 0)).toMatchObject({ status: "complete" });
-  });
+/** Opens the store on a page of messages. */
+async function openWith(context: ReturnType<typeof setup>, read: unknown) {
+  const opened = context.store.open(null);
+  at(context.restores, 0).resolve(read);
+  await opened;
+}
 
-  it("opens any address empty and sends nothing, as no other tab's state is reachable", () => {
-    const { store, sent } = setup(blockedStorage);
-
-    store.open("7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6");
-
-    expect(store.getSnapshot()).toEqual({
-      conversationId: "7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6",
-      turns: [],
-      busy: false,
-    });
-    expect(sent).toHaveLength(0);
-  });
-
-  it("starts a new chat without failing", async () => {
-    const { store, sent } = setup(blockedStorage);
-    store.open(null);
-    store.submit("Q?");
-    await answer(at(sent, 0));
-
-    store.newChat();
-
-    expect(store.getSnapshot()).toEqual({ conversationId: null, turns: [], busy: false });
-  });
-
-  it("refuses the hero's hand-off, which could not reach the Ask page", () => {
-    expect(handOffQuestion(blockedStorage, "Q?", sequentialIds())).toBeNull();
-  });
-});
-
-describe("a transport that throws as it is called", () => {
-  it("fails nothing else: the answer is interrupted and can be retried", async () => {
-    const storage = createMemoryStorage();
-    let calls = 0;
-    const adapter: ChatAdapter = {
-      send() {
-        calls++;
-        throw new Error("cannot connect");
-      },
-    };
-    const store = createConversationStore({ adapter, storage, createId: sequentialIds() });
-    store.open(null);
-
-    expect(store.submit("Q?")).toBe("sent");
+describe("stopping an answer", () => {
+  it("asks the API to stop the answering question and shows it stopped when its stream says so", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const sent = at(context.sent, 0);
+    sent.stream.push(event(sent, 0, { type: "start" }));
     await flush();
 
-    expect(at(store.getSnapshot().turns, 0).status).toBe("interrupted");
-    expect(store.getSnapshot().busy).toBe(false);
-    expect(calls).toBe(1);
+    const stopping = context.store.stop(sent.question.requestId);
+    expect(at(context.stops, 0).requestId).toBe(sent.question.requestId);
+    at(context.stops, 0).resolve("stopped");
+    await expect(stopping).resolves.toBe("stopped");
+    sent.stream.push(event(sent, 1, { type: "error", code: "cancelled", retryable: true }));
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      turns: [{ status: "failed", error: { code: "cancelled", retryable: true } }],
+    });
+    expect(context.onChange).toHaveBeenCalled();
+  });
+
+  it("stops a question the API has not admitted yet on the page, and it can be asked again", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const sent = at(context.sent, 0);
+
+    const stopping = context.store.stop(sent.question.requestId);
+    at(context.stops, 0).resolve("none");
+
+    await expect(stopping).resolves.toBe("stopped");
+    expect(sent.signal.aborted).toBe(true);
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      turns: [{ status: "failed", error: { code: "cancelled", retryable: true } }],
+    });
+    expect(context.store.retry(sent.question.requestId)).toBe("sent");
+  });
+
+  it("keeps following the answer when the API could not be asked to stop it", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const sent = at(context.sent, 0);
+
+    const stopping = context.store.stop(sent.question.requestId);
+    at(context.stops, 0).reject(new Error("unavailable"));
+
+    await expect(stopping).resolves.toBe("failed");
+    expect(sent.signal.aborted).toBe(false);
+    expect(context.store.getSnapshot().busy).toBe(true);
+  });
+
+  it("has nothing to stop for an answer that ended or a question that is not the latest", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    await answer(at(context.sent, 0));
+
+    await expect(context.store.stop(at(context.sent, 0).question.requestId)).resolves.toBe("none");
+    await expect(context.store.stop(storedRequest(9))).resolves.toBe("none");
+    expect(context.stops).toHaveLength(0);
+  });
+});
+
+describe("clearing the conversation", () => {
+  const fresh = page([], { retentionDays: 730 });
+
+  it("names the conversation it read, so a clear deletes only what the visitor saw", async () => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      conversationId: CONVERSATION,
+      telemetryDeletion: null,
+    });
+    void context.store.clear();
+
+    expect(at(context.clears, 0).conversationId).toBe(CONVERSATION);
+  });
+
+  it("shows the fresh empty conversation and a telemetry deletion still pending, never as done", async () => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+
+    const clearing = context.store.clear();
+    expect(context.store.getSnapshot().busy).toBe(true);
+    expect(context.store.submit("Q?")).toBe("busy");
+    at(context.clears, 0).resolve({
+      cleared: true,
+      conversation: { ...fresh, conversationId: OTHER_CONVERSATION },
+      telemetryDeletion: "pending",
+    });
+
+    await expect(clearing).resolves.toBe("cleared");
+    expect(context.store.getSnapshot()).toMatchObject({
+      conversationId: OTHER_CONVERSATION,
+      turns: [],
+      busy: false,
+      telemetryDeletion: "pending",
+    });
+    expect(context.onChange).toHaveBeenCalled();
+  });
+
+  it("forgets the clear's telemetry state once a new question is asked", async () => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+    const clearing = context.store.clear();
+    at(context.clears, 0).resolve({
+      cleared: true,
+      conversation: { ...fresh, conversationId: OTHER_CONVERSATION },
+      telemetryDeletion: "none",
+    });
+    await clearing;
+    expect(context.store.getSnapshot().telemetryDeletion).toBe("none");
+
+    context.store.submit("Next?");
+
+    expect(context.store.getSnapshot().telemetryDeletion).toBeNull();
+  });
+
+  it("stops following an answer the clear cancelled", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    const sent = at(context.sent, 0);
+
+    const clearing = context.store.clear();
+    at(context.clears, 0).resolve({
+      cleared: true,
+      conversation: { ...fresh, conversationId: OTHER_CONVERSATION },
+      telemetryDeletion: "none",
+    });
+    await clearing;
+
+    expect(sent.signal.aborted).toBe(true);
+    expect(context.store.getSnapshot()).toMatchObject({ turns: [], busy: false });
+  });
+
+  it("shows the conversation as it now is when it changed before the clear, deleting nothing", async () => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+
+    const clearing = context.store.clear();
+    at(context.clears, 0).resolve({
+      cleared: false,
+      conversation: page([user(1, "Q?"), answered(1, "A."), user(2, "Q2?"), answered(2, "B.")]),
+      telemetryDeletion: "none",
+    });
+
+    await expect(clearing).resolves.toBe("changed");
+    expect(context.store.getSnapshot()).toMatchObject({
+      telemetryDeletion: null,
+      turns: [{ requestId: storedRequest(1) }, { requestId: storedRequest(2) }],
+    });
+  });
+
+  it.each([
+    ["a failed request", new Error("unavailable")],
+    ["an answer the contract does not allow", { cleared: true }],
+  ])("keeps the conversation as it is after %s", async (_name, result) => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+
+    const clearing = context.store.clear();
+    if (result instanceof Error) at(context.clears, 0).reject(result);
+    else at(context.clears, 0).resolve(result);
+
+    await expect(clearing).resolves.toBe("failed");
+    expect(context.store.getSnapshot()).toMatchObject({
+      conversationId: CONVERSATION,
+      busy: false,
+      turns: [{ requestId: storedRequest(1) }],
+    });
+  });
+
+  it("clears nothing before the conversation was read", async () => {
+    const context = setup();
+    void context.store.open(null);
+
+    await expect(context.store.clear()).resolves.toBe("failed");
+    expect(context.clears).toHaveLength(0);
+  });
+});
+
+describe("another tab of the same conversation", () => {
+  it("reads the newest page again on a change and follows the answer the other tab started", async () => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+
+    void context.store.refresh();
+    at(context.restores, 1).resolve(
+      page([user(1, "Q?"), answered(1, "A."), user(2, "Other tab?"), pending(2)], {
+        activeOperation: activeOperation(2),
+      }),
+    );
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      turns: [{ requestId: storedRequest(1) }, { requestId: storedRequest(2), status: "pending" }],
+    });
+    expect(context.store.submit("Queued?")).toBe("busy");
+    expect(at(context.sent, 0).question).toEqual({
+      requestId: storedRequest(2),
+      question: "Other tab?",
+    });
+  });
+
+  it("reads again only after the answer it follows ends", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+
+    void context.store.refresh();
+    expect(context.restores).toHaveLength(1);
+    await answer(at(context.sent, 0));
+
+    expect(context.restores).toHaveLength(2);
+  });
+
+  it("keeps the earlier messages it read when the newest page still begins where it did", async () => {
+    const context = setup();
+    await openWith(context, page([user(2, "Q2?"), answered(2, "B.")], { nextCursor: storedId(4) }));
+    const earlier = context.store.loadEarlier();
+    at(context.restores, 1).resolve(page([user(1, "Q1?"), answered(1, "A.")]));
+    await earlier;
+
+    void context.store.refresh();
+    at(context.restores, 2).resolve(
+      page([user(2, "Q2?"), answered(2, "B."), user(3, "Q3?"), answered(3, "C.")], {
+        nextCursor: storedId(4),
+      }),
+    );
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      earlier: "none",
+      turns: [
+        { requestId: storedRequest(1) },
+        { requestId: storedRequest(2) },
+        { requestId: storedRequest(3) },
+      ],
+    });
+  });
+
+  it("shows a conversation another tab cleared as it now is", async () => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+
+    void context.store.refresh();
+    at(context.restores, 1).resolve({ ...page([]), conversationId: OTHER_CONVERSATION });
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      conversationId: OTHER_CONVERSATION,
+      turns: [],
+    });
+  });
+
+  it("after a busy refusal, shows and follows the other tab's answer, keeping the refused question to ask again", async () => {
+    const context = setup();
+    await openWith(context, page([user(1, "Q?"), answered(1, "A.")]));
+    context.store.submit("Mine?");
+    const mine = at(context.sent, 0);
+    mine.stream.fail(new ChatAdmissionError("busy"));
+    await flush();
+
+    at(context.restores, 1).resolve(
+      page([user(1, "Q?"), answered(1, "A."), user(2, "Other tab?"), pending(2)], {
+        activeOperation: activeOperation(2),
+      }),
+    );
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      turns: [
+        { requestId: storedRequest(1) },
+        { requestId: storedRequest(2), status: "pending" },
+        { requestId: mine.question.requestId, error: { code: "busy" } },
+      ],
+    });
+    await answer(at(context.sent, 1));
+    expect(context.store.retry(mine.question.requestId)).toBe("sent");
+  });
+
+  it("tells the other tabs when a question was admitted", async () => {
+    const context = setup();
+    await openEmpty(context);
+    context.store.submit("Q?");
+    expect(context.onChange).not.toHaveBeenCalled();
+
+    const sent = at(context.sent, 0);
+    sent.stream.push(event(sent, 0, { type: "start" }));
+    await flush();
+
+    expect(context.onChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("compacting the working context", () => {
+  const COMPACTION = "44444444-0000-4000-8000-000000000001";
+  const three = page([
+    user(1, "Q1?"),
+    answered(1, "A1."),
+    user(2, "Q2?"),
+    answered(2, "A2."),
+    user(3, "Q3?"),
+    answered(3, "A3."),
+  ]);
+
+  function compaction(requestId: string, fields: Partial<ChatOperation> = {}): ChatOperation {
+    return {
+      operationId: COMPACTION,
+      requestId,
+      kind: "compaction",
+      status: "running",
+      deadlineAt: "2026-11-20T10:01:00.000Z",
+      assistantMessageId: null,
+      compaction: null,
+      ...fields,
+    };
+  }
+
+  const compacted = {
+    status: "completed",
+    compaction: { outcome: "compacted", reason: null },
+  } as const;
+
+  /** Opens three exchanges and starts a compaction the API admits. */
+  async function started(context: ReturnType<typeof setup>) {
+    await openWith(context, three);
+    expect(context.store.compact()).toBe("started");
+    const asked = at(context.compacts, 0);
+    asked.resolve({ status: "started", operation: compaction(asked.requestId) });
+    await flush();
+    return asked.requestId;
+  }
+
+  it("asks once under a new request, busy meanwhile, never adding a message to the conversation", async () => {
+    const context = setup();
+    await openWith(context, three);
+    const before = context.store.getSnapshot().turns;
+
+    expect(context.store.compact()).toBe("started");
+
+    expect(context.compacts).toHaveLength(1);
+    const { requestId } = at(context.compacts, 0);
+    expect(requestId).toMatch(UUID);
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "preparing", requestId },
+    });
+    expect(context.store.getSnapshot().turns).toBe(before);
+    expect(context.store.submit("Meanwhile?")).toBe("busy");
+    expect(context.store.compact()).toBe("busy");
+    expect(context.sent).toHaveLength(0);
+  });
+
+  it("watches the admitted compaction, tells the other tabs, and shows its end with the history unchanged", async () => {
+    const context = setup();
+    const requestId = await started(context);
+    const before = context.store.getSnapshot().turns;
+
+    expect(context.onChange).toHaveBeenCalledTimes(1);
+    expect(context.watches).toMatchObject([{ operationId: COMPACTION }]);
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", requestId, operationId: COMPACTION, stopping: false },
+    });
+
+    at(context.watches, 0).stream.push(compaction(requestId));
+    at(context.watches, 0).stream.push(compaction(requestId, compacted));
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", requestId, end: { kind: "compacted" } },
+    });
+    expect(context.store.getSnapshot().turns).toBe(before);
+  });
+
+  it("ignores a watched body the contract does not allow", async () => {
+    const context = setup();
+    const requestId = await started(context);
+
+    at(context.watches, 0).stream.push({ operationId: "x" });
+    await flush();
+    expect(context.store.getSnapshot().compaction).toMatchObject({ status: "running" });
+
+    at(context.watches, 0).stream.push(
+      compaction(requestId, {
+        status: "completed",
+        compaction: { outcome: "unchanged", reason: "stale" },
+      }),
+    );
+    await flush();
+    expect(context.store.getSnapshot().compaction).toMatchObject({ end: { kind: "stale" } });
+  });
+
+  it("shows a watch that ended without an end as interrupted", async () => {
+    const context = setup();
+    await started(context);
+
+    at(context.watches, 0).stream.end();
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "interrupted" } },
+    });
+  });
+
+  it("shows nothing to compact for the API's no-op, watching nothing and telling no tab", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+
+    at(context.compacts, 0).resolve({ status: "noop", reason: "nothing_to_compact" });
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "nothing" } },
+    });
+    expect(context.watches).toHaveLength(0);
+    expect(context.onChange).not.toHaveBeenCalled();
+  });
+
+  it("shows a refusal with its reason and the API's Retry-After", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+
+    at(context.compacts, 0).reject(new ChatAdmissionError("quota_exceeded", 90));
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: {
+        status: "ended",
+        end: { kind: "refused", code: "quota_exceeded", retryAfterSeconds: 90 },
+      },
+    });
+  });
+
+  it("after a busy refusal, reads the conversation again and watches the other tab's compaction", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+
+    at(context.compacts, 0).reject(new ChatAdmissionError("busy"));
+    await flush();
+    expect(context.restores).toHaveLength(2);
+    at(context.restores, 1).resolve({
+      ...three,
+      activeOperation: compaction(storedRequest(9)),
+    });
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", requestId: storedRequest(9) },
+    });
+    expect(context.watches).toMatchObject([{ operationId: COMPACTION }]);
+  });
+
+  it("watches a compaction another tab started, or one still running after a reload, as busy", async () => {
+    const context = setup();
+    await openWith(context, { ...three, activeOperation: compaction(storedRequest(9)) });
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", requestId: storedRequest(9) },
+    });
+    expect(context.sent).toHaveLength(0);
+    expect(context.store.submit("Meanwhile?")).toBe("busy");
+
+    void context.store.refresh();
+    at(context.restores, 1).resolve({ ...three, activeOperation: compaction(storedRequest(9)) });
+    await flush();
+    expect(context.watches).toHaveLength(1);
+
+    at(context.watches, 0).stream.push(
+      compaction(storedRequest(9), {
+        status: "failed",
+        compaction: { outcome: "failed", reason: "provider" },
+      }),
+    );
+    await flush();
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "failed" } },
+    });
+    expect(context.store.submit("Now?")).toBe("sent");
+  });
+
+  it("stops a running compaction through the API, from whichever tab, and shows it stopped", async () => {
+    const context = setup();
+    const requestId = await started(context);
+
+    const stopping = context.store.stop(requestId);
+    expect(context.store.getSnapshot().compaction).toMatchObject({ stopping: true });
+    expect(context.stops).toMatchObject([{ requestId }]);
+    at(context.stops, 0).resolve("stopped");
+
+    await expect(stopping).resolves.toBe("stopped");
+    expect(context.onChange).toHaveBeenCalledTimes(2);
+    at(context.watches, 0).stream.push(compaction(requestId, { status: "cancelled" }));
+    await flush();
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "cancelled" } },
+    });
+  });
+
+  it("stops a compaction still at its person check, so it is never sent", async () => {
+    const context = setup();
+    await openWith(context, three);
+    context.store.compact();
+    const { requestId } = at(context.compacts, 0);
+
+    const stopping = context.store.stop(requestId);
+    at(context.stops, 0).resolve("none");
+    await expect(stopping).resolves.toBe("stopped");
+    at(context.compacts, 0).reject(new ChatAdmissionError("unavailable"));
+    await flush();
+
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: false,
+      compaction: { status: "ended", end: { kind: "cancelled" } },
+    });
+    expect(context.watches).toHaveLength(0);
+  });
+
+  it("keeps watching when the API could not be asked to stop, and says so", async () => {
+    const context = setup();
+    const requestId = await started(context);
+
+    const stopping = context.store.stop(requestId);
+    at(context.stops, 0).reject(new Error("network"));
+
+    await expect(stopping).resolves.toBe("failed");
+    expect(context.store.getSnapshot()).toMatchObject({
+      busy: true,
+      compaction: { status: "running", stopping: false, stopFailed: true },
+    });
+    expect(at(context.watches, 0).signal.aborted).toBe(false);
+  });
+
+  it("forgets a compaction's end once a new question is asked", async () => {
+    const context = setup();
+    const requestId = await started(context);
+    at(context.watches, 0).stream.push(compaction(requestId, compacted));
+    await flush();
+
+    expect(context.store.submit("Next?")).toBe("sent");
+    expect(context.store.getSnapshot().compaction).toBeNull();
+  });
+
+  it("stops watching a compaction the clear cancelled", async () => {
+    const context = setup();
+    await started(context);
+
+    const clearing = context.store.clear();
+    at(context.clears, 0).resolve({
+      cleared: true,
+      conversation: { ...emptyPage, conversationId: OTHER_CONVERSATION },
+      telemetryDeletion: "none",
+    });
+    await clearing;
+
+    expect(at(context.watches, 0).signal.aborted).toBe(true);
+    expect(context.store.getSnapshot()).toMatchObject({ busy: false, compaction: null });
   });
 });

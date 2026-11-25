@@ -8,8 +8,10 @@
   "scripts": {
     "api-keys": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/api-keys.js",
     "build": "tsc --project tsconfig.build.json",
+    "chat-maintenance": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/chat-maintenance.js",
     "clear-content": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/clear-content.js",
     "dev": "pnpm --silent --filter \"@sebela/api^...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --watch --import tsx src/server.ts",
+    "generate:ai-service": "openapi-typescript ../ai-service/openapi.json --output src/generated/ai-service/schema.ts --default-non-nullable false",
     "knowledge": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/knowledge.js",
     "lint": "eslint .",
     "media": "pnpm --silent --filter \"@sebela/api...\" build && node --env-file-if-exists=../../.env.example --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local dist/cli/media.js",
@@ -36,6 +38,7 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
+    "openapi-typescript": "catalog:",
     "tsx": "4.23.15",
     "typescript": "catalog:",
     "vitest": "catalog:"

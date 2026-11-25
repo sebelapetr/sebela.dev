@@ -43,6 +43,7 @@ export function testConfig(
     uploadLimitBytes: MEDIA_LIMITS.maxBytes,
     trustedProxies: [],
     websiteInvalidation: null,
+    chat: null,
     ...rest,
     rateLimits: {
       health: roomy,
@@ -83,6 +84,8 @@ export interface TestBackendOptions {
   readonly now?: () => Date;
   /** Retrieval settings and the embedding provider; without them retrieval is unavailable. */
   readonly retrieval?: ServicesOptions["retrieval"];
+  /** The chat settings, verifier and optional clock and policy; without them the chat is off. */
+  readonly chat?: ServicesOptions["chat"];
 }
 
 export async function openTestBackend(options: TestBackendOptions = {}): Promise<TestBackend> {
@@ -92,6 +95,7 @@ export async function openTestBackend(options: TestBackendOptions = {}): Promise
   const services = openServices(database.config, {
     ...(options.now ? { apiKeys: { now: options.now } } : {}),
     ...(options.retrieval ? { retrieval: options.retrieval } : {}),
+    ...(options.chat ? { chat: options.chat } : {}),
     media: {
       config: {
         storage: {

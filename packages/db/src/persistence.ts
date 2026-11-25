@@ -4,6 +4,7 @@ import type { DatabaseConfig } from "./config.js";
 import { openConnection } from "./connection.js";
 import { createApiKeyPersistence, type ApiKeyPersistence } from "./modules/api-keys/index.js";
 import { createAuditPersistence, type AuditPersistence } from "./modules/audit/index.js";
+import { createChatPersistence, type ChatPersistence } from "./modules/chat/index.js";
 import {
   createMaintenancePersistence,
   type MaintenancePersistence,
@@ -24,6 +25,8 @@ export interface Persistence {
   readonly audit: AuditPersistence;
   /** The private knowledge index and its embedding spend. */
   readonly retrieval: RetrievalPersistence;
+  /** The private visitor chat: identities, conversations, admissions, grants and spend. */
+  readonly chat: ChatPersistence;
   /** Whole-database operations of the owner's maintenance commands, such as the demo clear. */
   readonly maintenance: MaintenancePersistence;
   /**
@@ -57,6 +60,7 @@ export function createPersistence(config: DatabaseConfig): Persistence {
     audit: createAuditPersistence(connection.db),
     retrieval: createRetrievalPersistence(connection.db),
     maintenance: createMaintenancePersistence(connection.db),
+    chat: createChatPersistence(connection.db),
     transaction: (work) =>
       connection.db.transaction((tx) =>
         work(

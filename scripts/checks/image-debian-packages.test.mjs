@@ -43,7 +43,10 @@ const aptCommands = (run) => [...run.matchAll(/\bapt(?:-get)?\s[^;]*/g)].map((m)
 
 describe("Debian package fixes in the images", () => {
   it("is found in every image's Dockerfile, exactly once", () => {
-    assert.ok(dockerfiles.length >= 3, "expected the API, website and MCP Admin Dockerfiles");
+    assert.ok(
+      dockerfiles.length >= 3,
+      "expected the API, website, MCP Admin and AI service Dockerfiles",
+    );
     for (const file of dockerfiles) {
       assert.equal(blocksOf(readFileSync(path.join(root, file), "utf8")).length, 1, file);
     }
@@ -59,7 +62,7 @@ describe("Debian package fixes in the images", () => {
   it("sits directly after the base stage's FROM, so every later stage inherits it", () => {
     for (const file of dockerfiles) {
       const text = readFileSync(path.join(root, file), "utf8");
-      assert.match(text, /^FROM node:\S+ AS base\n# BEGIN debian-package-fixes/m, file);
+      assert.match(text, /^FROM (?:node|python):\S+ AS base\n# BEGIN debian-package-fixes/m, file);
     }
   });
 

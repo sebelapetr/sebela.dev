@@ -1,0 +1,9 @@
+# openapi-python-client settings for the generated Python client of the content API
+# (pnpm --filter @sebela/api-client-python generate). The post hooks format the output with Ruff's
+# defaults, independent of any package's own Ruff settings, so the generated files are the same
+# everywhere.
+project_name_override: sebela-api-client
+package_name_override: sebela_api_client
+post_hooks:
+  - "ruff check --isolated --fix-only --extend-select=I ."
+  - "ruff format --isolated ."

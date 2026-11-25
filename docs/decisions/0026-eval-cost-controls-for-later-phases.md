@@ -32,4 +32,4 @@ The phase-6 campaign showed where money goes: repeated full runs, judge calls an
 
 ## Relationship to earlier decisions
 
-Changes the eval budget rules written in `.plan/07-ai-service/`, `.plan/08-mcp-public/prd.md` and `.plan/09.1-rag-integration/prd.md`, which are updated with this record. The archived phase-6 plans and earlier records are not rewritten.
+Changes the eval budget rules written in `.plan/done/07-ai-service/`, `.plan/08-mcp-public/prd.md` and `.plan/09.1-rag-integration/prd.md`, which are updated with this record. The archived phase-6 plans and earlier records are not rewritten.

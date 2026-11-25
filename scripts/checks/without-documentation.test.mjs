@@ -187,6 +187,7 @@ describe("this repository", () => {
 
   it("counts the Markdown a package build reads as its readme", () => {
     assert.ok(readmes.includes("packages/llm-agent/AGENTS.md"));
+    assert.ok(readmes.includes("packages/api-client-python/AGENTS.md"));
     for (const file of readmes) assert.equal(isDocumentation(file), false, file);
   });
 

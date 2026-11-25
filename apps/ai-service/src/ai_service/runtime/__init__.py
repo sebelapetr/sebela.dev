@@ -1,0 +1,1 @@
+"""The generation runtime (stub)."""

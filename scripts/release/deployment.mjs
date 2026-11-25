@@ -46,9 +46,13 @@ const CONVENTIONAL = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?: (?<de
  * The forced-command input that deploys `tags`, a map of every service to the commit SHA of its
  * image, from `release`, the release commit whose repository files the server's checkout is brought
  * to. Throws on a release or a tag that is not a commit SHA and on a missing or unknown service;
- * the server's script checks the same again.
+ * the server's script checks the same again. The AI service's tag is part of the input unless
+ * `aiService` is false: the server's script that runs first, before it checks out the release,
+ * refuses an input over 200 characters or with a service it does not know, so the release that
+ * brings the new script sends the input that script accepts (docs/release-workflow.md,
+ * "Repository files"). The tag set itself is still complete and validated.
  */
-export function deployInput(tags, release) {
+export function deployInput(tags, release, { aiService = true } = {}) {
   if (typeof release !== "string" || !COMMIT.test(release)) {
     throw new Error(`The release commit is not a commit SHA: ${String(release)}`);
   }
@@ -57,12 +61,12 @@ export function deployInput(tags, release) {
   }
   const unknown = Object.keys(tags).filter((service) => !SERVICES.includes(service));
   if (unknown.length > 0) throw new Error(`Unknown services in the tag set: ${unknown.join(", ")}`);
-  const words = SERVICES.map((service) => {
+  const words = SERVICES.flatMap((service) => {
     const tag = tags[service];
     if (typeof tag !== "string" || !COMMIT.test(tag)) {
       throw new Error(`The tag of ${service} is not a commit SHA: ${String(tag)}`);
     }
-    return `${service}=${tag}`;
+    return aiService || service !== "ai-service" ? [`${service}=${tag}`] : [];
   });
   return ["deploy", `release=${release}`, ...words].join(" ");
 }
@@ -435,7 +439,10 @@ function tagsFromEnvironment() {
 }
 
 function inputCommand() {
-  process.stdout.write(`${deployInput(tagsFromEnvironment(), process.env.SHA)}\n`);
+  // DEPLOY_AI_SERVICE_INPUT=true (a variable of the `production` environment, set by the owner once
+  // the server's script accepts it) puts the AI service's tag in the input.
+  const aiService = process.env.DEPLOY_AI_SERVICE_INPUT === "true";
+  process.stdout.write(`${deployInput(tagsFromEnvironment(), process.env.SHA, { aiService })}\n`);
 }
 
 /** The commits of `range` (`<from>..<to>` or one commit and its history), newest first. */

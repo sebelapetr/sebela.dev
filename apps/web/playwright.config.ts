@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { apiCommand, mediaBaseUrl, origin, required, webCommand } from "./e2e/stack";
+import { apiCommand, chatOff, mediaBaseUrl, origin, required, webCommand } from "./e2e/stack";
 
 // The browser tests run the built website (`pnpm build` first) against the API's end-to-end
 // server: a real API on a temporary database of its own, seeded from a fictional fixture. Both
@@ -36,7 +36,14 @@ export default defineConfig({
       ...apiCommand("with-photo"),
       url: `${apiUrl}/health`,
       // No invalidation notifications here: `e2e/invalidation.spec.ts` starts its own pair.
-      env: { API_WEB_INVALIDATION_URL: "", API_WEB_INVALIDATION_SECRET: "", API_E2E_KEY_FILE: "" },
+      // The chat is off here too: the chat tests start their own stack with the AI service
+      // (e2e/chat-stack.ts).
+      env: {
+        ...chatOff,
+        API_WEB_INVALIDATION_URL: "",
+        API_WEB_INVALIDATION_SECRET: "",
+        API_E2E_KEY_FILE: "",
+      },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
       stdout: "pipe",
@@ -57,6 +64,8 @@ export default defineConfig({
         // The launched site's metadata, whatever the checkout says (e2e/seo.spec.ts checks the
         // default, which keeps the site out of search engines).
         WEB_INDEXING: "on",
+        // No person check: the chat is off on this API.
+        WEB_TURNSTILE_SITE_KEY: "",
       },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },

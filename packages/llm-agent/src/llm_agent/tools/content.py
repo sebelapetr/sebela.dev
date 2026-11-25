@@ -20,9 +20,8 @@ from urllib.parse import urlsplit
 
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field
-
-from llm_agent.generated.content_api import Client
-from llm_agent.generated.content_api.api.default import (
+from sebela_api_client import Client
+from sebela_api_client.api.default import (
     get_person,
     get_project,
     get_roadmap,
@@ -37,37 +36,39 @@ from llm_agent.generated.content_api.api.default import (
     list_roadmap_books,
     list_roadmap_events,
     list_services,
+    list_technologies,
 )
-from llm_agent.generated.content_api.models.current_focus import CurrentFocus
-from llm_agent.generated.content_api.models.diary import Diary
-from llm_agent.generated.content_api.models.diary_day import DiaryDay
-from llm_agent.generated.content_api.models.diary_event import DiaryEvent
-from llm_agent.generated.content_api.models.diary_resource import DiaryResource
-from llm_agent.generated.content_api.models.education import Education
-from llm_agent.generated.content_api.models.experience import Experience
-from llm_agent.generated.content_api.models.exploration import Exploration
-from llm_agent.generated.content_api.models.learning_time_area import LearningTimeArea
-from llm_agent.generated.content_api.models.learning_time_event import LearningTimeEvent
-from llm_agent.generated.content_api.models.learning_time_resource import LearningTimeResource
-from llm_agent.generated.content_api.models.person import Person
-from llm_agent.generated.content_api.models.project import Project
-from llm_agent.generated.content_api.models.roadmap import Roadmap
-from llm_agent.generated.content_api.models.roadmap_area_detail import RoadmapAreaDetail
-from llm_agent.generated.content_api.models.roadmap_book import RoadmapBook
-from llm_agent.generated.content_api.models.roadmap_event import RoadmapEvent
-from llm_agent.generated.content_api.models.roadmap_progress import RoadmapProgress
-from llm_agent.generated.content_api.models.roadmap_statistics import RoadmapStatistics
-from llm_agent.generated.content_api.models.roadmap_tree_area import RoadmapTreeArea
-from llm_agent.generated.content_api.models.roadmap_tree_module import RoadmapTreeModule
-from llm_agent.generated.content_api.models.roadmap_tree_resource import RoadmapTreeResource
-from llm_agent.generated.content_api.models.service import Service
-from llm_agent.generated.content_api.models.service_exploration_evidence import (
+from sebela_api_client.models.current_focus import CurrentFocus
+from sebela_api_client.models.diary import Diary
+from sebela_api_client.models.diary_day import DiaryDay
+from sebela_api_client.models.diary_event import DiaryEvent
+from sebela_api_client.models.diary_resource import DiaryResource
+from sebela_api_client.models.education import Education
+from sebela_api_client.models.experience import Experience
+from sebela_api_client.models.exploration import Exploration
+from sebela_api_client.models.learning_time_area import LearningTimeArea
+from sebela_api_client.models.learning_time_event import LearningTimeEvent
+from sebela_api_client.models.learning_time_resource import LearningTimeResource
+from sebela_api_client.models.person import Person
+from sebela_api_client.models.project import Project
+from sebela_api_client.models.roadmap import Roadmap
+from sebela_api_client.models.roadmap_area_detail import RoadmapAreaDetail
+from sebela_api_client.models.roadmap_book import RoadmapBook
+from sebela_api_client.models.roadmap_event import RoadmapEvent
+from sebela_api_client.models.roadmap_progress import RoadmapProgress
+from sebela_api_client.models.roadmap_statistics import RoadmapStatistics
+from sebela_api_client.models.roadmap_tree_area import RoadmapTreeArea
+from sebela_api_client.models.roadmap_tree_module import RoadmapTreeModule
+from sebela_api_client.models.roadmap_tree_resource import RoadmapTreeResource
+from sebela_api_client.models.service import Service
+from sebela_api_client.models.service_exploration_evidence import (
     ServiceExplorationEvidence,
 )
-from llm_agent.generated.content_api.models.service_project_evidence import (
+from sebela_api_client.models.service_project_evidence import (
     ServiceProjectEvidence,
 )
-from llm_agent.generated.content_api.types import Response
+from sebela_api_client.models.technology import Technology
+from sebela_api_client.types import Response
 
 #: Transport timeout of one content read; the tool call timeout bounds it further.
 READ_TIMEOUT_S = 5.0
@@ -206,6 +207,20 @@ class PublicService(_Read):
     audience: str
     deliverable: str
     evidence: list[PublicServiceEvidence]
+
+
+TechnologyTier = Literal["primary", "secondary"]
+TechnologyGroup = Literal["core", "ai_engineering_focus"]
+
+
+class PublicTechnology(_Read):
+    """A technology of the catalogue: its tier and, when primary, its group; no logo."""
+
+    id: str
+    slug: Slug
+    name: str
+    tier: TechnologyTier
+    group: TechnologyGroup | None
 
 
 class PublicEducation(_Read):
@@ -476,6 +491,8 @@ class ContentReader(Protocol):
 
     async def read_education(self) -> list[PublicEducation]: ...
 
+    async def read_technologies(self) -> list[PublicTechnology]: ...
+
     async def read_current_focus(self) -> list[PublicCurrentFocus]: ...
 
     async def read_roadmap(self) -> PublicRoadmap: ...
@@ -624,6 +641,18 @@ def _education(education: Education) -> PublicEducation:
         started_on=education.started_on,
         ended_on=education.ended_on,
         description=education.description,
+    )
+
+
+def _technology(technology: Technology) -> PublicTechnology:
+    return PublicTechnology.model_validate(
+        {
+            "id": str(technology.id),
+            "slug": technology.slug,
+            "name": technology.name,
+            "tier": str(technology.tier),
+            "group": None if technology.group is None else str(technology.group),
+        }
     )
 
 
@@ -910,6 +939,10 @@ class ApiContentReader:
     async def read_education(self) -> list[PublicEducation]:
         items = await self._fetch(list_education.asyncio_detailed(client=self._client), list)
         return self._map(lambda rows: [_education(row) for row in rows], items)
+
+    async def read_technologies(self) -> list[PublicTechnology]:
+        items = await self._fetch(list_technologies.asyncio_detailed(client=self._client), list)
+        return self._map(lambda rows: [_technology(row) for row in rows], items)
 
     async def read_current_focus(self) -> list[PublicCurrentFocus]:
         items = await self._fetch(list_current_focus.asyncio_detailed(client=self._client), list)

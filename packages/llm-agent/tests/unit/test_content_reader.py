@@ -345,6 +345,51 @@ async def test_a_failed_career_read_is_unavailable() -> None:
         assert not isinstance(raised.value, ContentNotFoundError)
 
 
+TECHNOLOGIES_JSON = [
+    {**technology("python", "Python"), "group": "core", "logoKey": "python"},
+    {
+        **technology("bash", "Bash"),
+        "id": "00000000-0000-4000-8000-0000000000a2",
+        "tier": "secondary",
+        "position": 1,
+    },
+]
+
+
+async def test_the_technology_read_maps_tier_and_group_without_logos_or_ids() -> None:
+    seen: list[httpx2.Request] = []
+    transport = routes(seen, **{"/v1/technologies": (200, TECHNOLOGIES_JSON)})
+    async with ApiContentReader(BASE_URL, transport=transport) as reader:
+        technologies = await reader.read_technologies()
+    assert [(t.slug, t.name, t.tier, t.group) for t in technologies] == [
+        ("python", "Python", "primary", "core"),
+        ("bash", "Bash", "secondary", None),
+    ]
+    dumped = technologies[0].model_dump(mode="json")
+    assert {"logo_key", "logoKey", "position", "created_at"}.isdisjoint(dumped)
+    assert [(r.method, r.url.path) for r in seen] == [("GET", "/v1/technologies")]
+    assert {key.lower() for key in seen[0].headers}.isdisjoint({"authorization", "x-api-key"})
+
+
+@pytest.mark.parametrize(
+    ("status", "body"),
+    [
+        (200, [{**TECHNOLOGIES_JSON[0], "tier": "legendary"}]),
+        (200, [{**TECHNOLOGIES_JSON[0], "slug": "Not A Slug"}]),
+        (200, {"unexpected": True}),
+        (500, {"error": {"code": "internal_error", "message": "Failed."}}),
+    ],
+)
+async def test_a_malformed_or_failed_technology_read_is_unavailable(
+    status: int, body: object
+) -> None:
+    seen: list[httpx2.Request] = []
+    transport = routes(seen, **{"/v1/technologies": (status, body)})
+    async with ApiContentReader(BASE_URL, transport=transport) as reader:
+        with pytest.raises(ContentUnavailableError):
+            await reader.read_technologies()
+
+
 # --- Learning reads -------------------------------------------------------------------------
 
 UUID = "00000000-0000-4000-8000-000000000201"

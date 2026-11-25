@@ -25,7 +25,14 @@ def grade(case_id: str, data: dict[str, Any]) -> list[str]:
 
 
 def test_every_conversation_case_carries_history_and_no_other_case_does() -> None:
-    assert {case.id for case in CASES if case.history} == set(CONVERSATION)
+    """The compaction cases (#213) and the trace export cases (#214) carry history too;
+    `test_compaction_graders.py` and `test_trace_export_graders.py` own them."""
+    plain = {
+        case.id
+        for case in CASES
+        if case.history and case.compaction is None and case.trace_export is None
+    }
+    assert plain == set(CONVERSATION)
 
 
 @pytest.mark.parametrize("case_id", CONVERSATION)

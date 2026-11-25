@@ -29,6 +29,12 @@ import { pathParams } from "./middleware/path-params.js";
 import { createRateLimits } from "./middleware/limits.js";
 import { noSniff, redact, requestLog, type Logger } from "./middleware/logging.js";
 import { auditRoutes } from "./modules/audit/index.js";
+import {
+  chatRouteDocumentation,
+  registerChatRoutes,
+  type ChatDispatcher,
+  type ChatTiming,
+} from "./modules/chat/index.js";
 import { mediaRoutes } from "./modules/media/index.js";
 import { profileRoutes } from "./modules/profile/index.js";
 import { retrievalRoutes } from "./modules/retrieval/index.js";
@@ -144,7 +150,7 @@ function changesOf(
 export interface AppDependencies {
   readonly services: Pick<
     Services,
-    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "knowledge" | "health"
+    "profile" | "apiKeys" | "media" | "roadmap" | "audit" | "knowledge" | "health" | "chat"
   >;
   readonly config: ApiConfig;
   /** Milliseconds since the epoch, for rate-limit windows. */
@@ -156,6 +162,13 @@ export interface AppDependencies {
    * a later notifier from being called.
    */
   readonly onWrite?: WriteNotifier | readonly WriteNotifier[];
+  /**
+   * Hands each admitted chat question to the AI service, required when `config.chat` is set. The
+   * request that admitted the question never waits for it.
+   */
+  readonly chatDispatcher?: ChatDispatcher;
+  /** The chat event stream's polling, progress and deadline grace, for tests. */
+  readonly chatTiming?: Partial<ChatTiming>;
 }
 
 /** A route as it is registered and documented. */
@@ -263,6 +276,7 @@ const documentedRoutes = (modules: readonly RouteDefinition[]): RouteDocumentati
   systemRoutes.readiness,
   systemRoutes.authentication,
   ...modules,
+  ...chatRouteDocumentation(),
   systemRoutes.openapi,
   systemRoutes.reference,
 ];
@@ -586,6 +600,14 @@ export function createApp(dependencies: AppDependencies): Api {
   );
 
   modules.forEach(register);
+  registerChatRoutes(app, {
+    chat: services.chat,
+    config,
+    limits,
+    dispatcher: dependencies.chatDispatcher ?? null,
+    now: dependencies.now ?? Date.now,
+    ...(dependencies.chatTiming ? { timing: dependencies.chatTiming } : {}),
+  });
 
   // Built on the first request and kept: building it costs more than the rest of the app.
   let document: OpenApiDocument | undefined;

@@ -10,6 +10,7 @@ export default defineConfig({
     "./src/modules/api-keys/schema.ts",
     "./src/modules/audit/schema.ts",
     "./src/modules/retrieval/schema.ts",
+    "./src/modules/chat/schema.ts",
   ],
   out: "./migrations",
 });

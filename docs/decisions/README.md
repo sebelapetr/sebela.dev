@@ -47,3 +47,4 @@ Date: YYYY-MM-DD
 | 0026 | [Eval cost controls for phases 7, 7.1 and 8](0026-eval-cost-controls-for-later-phases.md)                                                       |
 | 0027 | [Work is selected from milestones, phase tracking issues and native dependencies](0027-native-work-selection.md)                                |
 | 0028 | [A merge that builds no image reaches the server with the next release](0028-merges-without-an-image-reach-the-server-with-the-next-release.md) |
+| 0029 | [An uncertain abuse verdict is refused at Security](0029-uncertain-abuse-verdict-blocks.md)                                                     |

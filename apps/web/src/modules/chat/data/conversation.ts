@@ -3,6 +3,7 @@
 // page.
 import {
   advanceChatAttempt,
+  ChatProgressSchema,
   ChatStreamEventSchema,
   startChatAttempt,
   type ChatAttempt,
@@ -13,11 +14,38 @@ import {
   type ChatSource,
 } from "@sebela/contracts";
 
+import type { ChatAdmissionCode } from "./admission";
+
+/** The admission codes a new attempt may pass. */
+const retryableAdmissions: ReadonlySet<ChatAdmissionCode> = new Set([
+  "challenge_failed",
+  "busy",
+  "quota_exceeded",
+  "rate_limited",
+  "unavailable",
+]);
+
 /**
  * Where one question's answer stands: waiting for its first event, streaming, complete (with its
  * outcome), failed (with an error) or interrupted (its stream ended without a terminal event).
  */
 export type ChatTurnStatus = "pending" | "streaming" | "complete" | "failed" | "interrupted";
+
+/** Why an answer failed: a stream error, or a question the API did not admit. */
+export type ChatTurnErrorCode = ChatErrorCode | ChatAdmissionCode;
+
+/** The failure of a turn; `retryAfterSeconds` only where the API said when to try again. */
+export interface ChatTurnError {
+  readonly code: ChatTurnErrorCode;
+  readonly retryable: boolean;
+  readonly retryAfterSeconds?: number;
+}
+
+/** The main model and effort an answer was produced with, as its stored message recorded them. */
+export interface ChatTurnModel {
+  readonly name: string;
+  readonly effort: string | null;
+}
 
 /** One question of a conversation and the answer received for it so far. */
 export interface ChatTurn {
@@ -30,7 +58,12 @@ export interface ChatTurn {
   readonly sources: readonly ChatSource[];
   readonly related: readonly ChatRelatedLink[];
   readonly outcome: ChatOutcome | null;
-  readonly error: { readonly code: ChatErrorCode; readonly retryable: boolean } | null;
+  readonly error: ChatTurnError | null;
+  /**
+   * The model its stored answer was produced with; null for an answer only streamed in this tab
+   * so far, or one stored without it.
+   */
+  readonly model: ChatTurnModel | null;
 }
 
 /** A question just sent: pending, with no answer yet. */
@@ -46,6 +79,7 @@ export function startChatTurn(requestId: string, question: string): ChatTurn {
     related: [],
     outcome: null,
     error: null,
+    model: null,
   };
 }
 
@@ -55,12 +89,16 @@ export function isChatTurnOpen(turn: ChatTurn): boolean {
 }
 
 /**
- * Applies one raw event to the turn. An ended turn, a duplicate and an event for another request
- * (a late event of a cancelled one) change nothing and return the same turn. A malformed or
- * misplaced event fails the turn as an invalid stream, keeping what was received. Pure.
+ * Applies one raw event to the turn. An ended turn, a duplicate, an event for another request
+ * (a late event of a cancelled one) and a progress sign of life change nothing and return the same
+ * turn. A malformed or misplaced event fails the turn as an invalid stream, keeping what was
+ * received. Pure.
  */
 export function receiveChatEvent(turn: ChatTurn, raw: unknown): ChatTurn {
   if (!isChatTurnOpen(turn)) return turn;
+  if (isProgressFrame(raw)) {
+    return ChatProgressSchema.safeParse(raw).success ? turn : fail(turn, "invalid_stream");
+  }
   const parsed = ChatStreamEventSchema.safeParse(raw);
   if (!parsed.success) return fail(turn, "invalid_stream");
   const event = parsed.data;
@@ -89,6 +127,30 @@ export function receiveChatEvent(turn: ChatTurn, raw: unknown): ChatTurn {
   }
 }
 
+/**
+ * The API did not admit the question: an open turn fails with the reason, retryable where a new
+ * attempt may pass (a failed person check, a busy conversation, a spent visitor allowance, a burst
+ * limit, an unreachable assistant), never for a spent site budget, a request already used, an
+ * invalid question or an attempt the API no longer lets be asked again. Pure.
+ */
+export function rejectChatTurn(
+  turn: ChatTurn,
+  code: ChatAdmissionCode,
+  retryAfterSeconds: number | null = null,
+): ChatTurn {
+  if (!isChatTurnOpen(turn)) return turn;
+  const error: ChatTurnError = {
+    code,
+    retryable: retryableAdmissions.has(code),
+    ...(retryAfterSeconds === null ? {} : { retryAfterSeconds }),
+  };
+  return { ...turn, status: "failed", error };
+}
+
+function isProgressFrame(raw: unknown): boolean {
+  return typeof raw === "object" && raw !== null && "type" in raw && raw.type === "progress";
+}
+
 /** The stream is over: a turn still waiting for its terminal event is interrupted. */
 export function endChatStream(turn: ChatTurn): ChatTurn {
   return isChatTurnOpen(turn) ? { ...turn, status: "interrupted" } : turn;
@@ -111,10 +173,21 @@ export function canRetryChatTurn(turn: ChatTurn): boolean {
 
 /**
  * A new attempt at the same logical request: the question and request stay, the failed answer
- * attempt is replaced and the new attempt's events are accepted from the beginning.
+ * attempt is replaced and the new attempt's events (a new answer message) are accepted from the
+ * beginning.
  */
 export function restartChatTurn(turn: ChatTurn): ChatTurn {
   return startChatTurn(turn.requestId, turn.question);
+}
+
+/**
+ * The visitor stopped the answer before the API admitted it, so no stream will end it: an open
+ * turn fails as cancelled, keeping its partial answer, and may be asked again. Pure.
+ */
+export function stopChatTurn(turn: ChatTurn): ChatTurn {
+  return isChatTurnOpen(turn)
+    ? { ...turn, status: "failed", error: { code: "cancelled", retryable: true } }
+    : turn;
 }
 
 /** No event came for too long: an open turn fails as timed out, keeping its partial answer. */

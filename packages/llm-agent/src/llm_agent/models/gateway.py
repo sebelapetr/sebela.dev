@@ -5,10 +5,10 @@ is built per attempt by a `ModelFactory` from a validated `ModelCall`, so tests 
 models and production uses `anthropic_model_factory()` (LangChain's ChatAnthropic with SDK retries
 disabled; an answer-only call keeps its tools defined with `tool_choice` `none`). Every attempt is
 admitted against the execution budget first and bounded by its stage timeout and the execution
-deadline, and is recorded as a `model.<stage>` span with its model, effort, attempt number and the
-provider-reported tokens (thinking tokens are part of the output tokens; the provider does not
-report them separately). A reply the stage's validity check rejects is an `invalid` attempt and
-uses the single retry exactly as a transient failure does.
+deadline, and is recorded as a `model.<stage>` span (or the span the caller names) with its model,
+effort, attempt number and the provider-reported tokens (thinking tokens are part of the output
+tokens; the provider does not report them separately). A reply the stage's validity check
+rejects is an `invalid` attempt and uses the single retry exactly as a transient failure does.
 """
 
 from __future__ import annotations
@@ -120,13 +120,16 @@ class Gateway:
         input_cap: int,
         output_cap: int,
         attempt_s: float,
+        span: str | None = None,
     ) -> BaseMessage:
         """One completion within the execution's admission, deadline and single retry.
 
         `answer_only` forbids tool calls on this attempt (the tools stay defined). `valid`, when
         given, judges a reply: an invalid one is recorded as an `invalid` attempt and retried once
         under the same retry allowance, deadline and admission as a transient failure; when no
-        retry is left the invalid reply is returned for the stage to reject.
+        retry is left the invalid reply is returned for the stage to reject. `span` names the
+        attempt spans when a call is not the stage's own answer step (`model.compact`); the
+        default is `model.<stage>`.
         """
         config = STAGES[stage]
         attempt = 0
@@ -134,8 +137,9 @@ class Gateway:
             attempt += 1
             if self._deadline.expired:
                 raise LimitReached("deadline")
+            estimated = request_tokens(messages, tools, schema)
             admission = self._budget.admit(
-                input_tokens=request_tokens(messages, tools, schema),
+                input_tokens=estimated,
                 input_cap=input_cap,
                 output_cap=output_cap,
                 prices=config.prices,
@@ -153,12 +157,14 @@ class Gateway:
                     answer_only=answer_only,
                 )
             )
-            span = f"model.{stage}"
+            name = span or f"model.{stage}"
             started = self._tracer.start()
             labels: dict[str, str | int | None] = {
                 "model": config.model,
                 "effort": config.effort,
                 "attempt": attempt,
+                "estimated_input_tokens": estimated,
+                "input_cap": input_cap,
             }
             try:
                 async with asyncio.timeout(timeout):
@@ -170,7 +176,7 @@ class Gateway:
                 # Timeouts, connection losses and unexpected failures: usage is unknown.
                 self._budget.settle(admission, None)
                 if isinstance(error, TimeoutError) and self._deadline.expired:
-                    self._tracer.finish(span, "timeout", started, **labels, **_NO_TOKENS)
+                    self._tracer.finish(name, "timeout", started, **labels, **_NO_TOKENS)
                     raise LimitReached("deadline") from error
                 failure = error
             else:
@@ -182,9 +188,9 @@ class Gateway:
                     else _NO_TOKENS
                 )
                 if valid is None or valid(reply):
-                    self._tracer.finish(span, "ok", started, **labels, **tokens)
+                    self._tracer.finish(name, "ok", started, **labels, **tokens)
                     return reply
-                self._tracer.finish(span, "invalid", started, **labels, **tokens)
+                self._tracer.finish(name, "invalid", started, **labels, **tokens)
                 # The pause the retry would need must fit the deadline, as for a transient failure.
                 if self._deadline.remaining() <= RETRY_BACKOFF_S or not self._budget.allow_retry():
                     return reply
@@ -193,7 +199,7 @@ class Gateway:
             status = "transient_error" if is_transient(failure) else "error"
             if isinstance(failure, TimeoutError):
                 status = "timeout"
-            self._tracer.finish(span, status, started, **labels, **_NO_TOKENS)
+            self._tracer.finish(name, status, started, **labels, **_NO_TOKENS)
             # The pause the provider asks for; one that would outlast the deadline is not waited for
             # and the retry allowance stays unused.
             pause = max(RETRY_BACKOFF_S, retry_after_s(failure) or 0.0)

@@ -1330,6 +1330,250 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/conversation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the visitor's chat conversation
+         * @description The caller's one conversation, newest messages first in pages, with its active operation. The caller is the chat cookie; a request without one gets a new identity. Never cached.
+         */
+        get: operations["getChatConversation"];
+        put?: never;
+        post?: never;
+        /**
+         * Clear the visitor's chat conversation
+         * @description Deletes the caller's conversation when the body names it, as the visitor confirmed: active work is cancelled, messages are deleted, late results are refused and a fresh empty conversation of the same identity starts. Quotas and spend stay. Any other conversation ID clears nothing and returns the caller's conversation unchanged; a URL is never a delete credential. `telemetryDeletion` is `pending` while exported telemetry still awaits deletion.
+         */
+        delete: operations["clearChatConversation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/conversation/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the chat a question
+         * @description The one public write: the caller asks one question of their own conversation behind the bot challenge, the per-visitor quotas and the global spend budget. The request is sent by the website's server from an allowed origin; the visitor's address for the quotas and the challenge is the one the website's relay names, if any. Admission returns at once; the answer is generated detached from the request and read from the operation's events.
+         */
+        post: operations["askChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/conversation/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compact the visitor's working context
+         * @description The visitor's `/compact`: summarizes the caller's current working context (the previous summary and the exchanges since it) so later questions carry less history. It is no message, appends nothing and changes no visible history. A context of fewer than three exchanges is a local no-op before any challenge, quota or spend. Otherwise the bot challenge, the quotas and the spend budget apply as to a question, and it holds the conversation as a question does; its progress is read from the operation, from any tab. The same request ID again is recovered before any challenge. Never retried automatically.
+         */
+        post: operations["compactChatConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/operations/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a chat operation
+         * @description One of the caller's operations and its status. Never cached.
+         */
+        get: operations["getChatOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/operations/{operationId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream a chat operation's events
+         * @description Server-sent events of one of the caller's operations. Each `chat` event carries a `ChatStreamEvent` with its event ID; a reconnect with `Last-Event-ID` continues after it with the same IDs. While the operation runs, a `progress` event without an ID carries a `ChatProgress` at least every five seconds. The stream ends at the terminal event, or after the deadline and a short grace with a retryable `timeout` error.
+         */
+        get: operations["streamChatOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the visitor's chat usage and limits
+         * @description The caller's own meters (questions in the rolling two hours and the UTC day), the restriction a new question would meet now and when it may pass again, the effective main model and effort, the active operation and the conversation's last measured main-call input against its cap. Reading consumes nothing and admits nothing; the meters are informative, admission decides alone. Never another visitor's counts or the site's spend. Never cached.
+         */
+        get: operations["getChatUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/operations/{operationId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a chat operation
+         * @description Stops one of the caller's operations from any tab, without a new bot challenge: an active operation ends as a retryable `cancelled` error, and a generation that claimed its grant is told to stop. Its reserved cost stays until the generation reports what it spent. An operation that already ended is returned as it is.
+         */
+        post: operations["stopChatOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/operations/{operationId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry a failed chat answer
+         * @description Asks the question of one of the caller's failed attempts again as a new attempt of the same request, keyed by its own retry ID, and replaces only the failed answer. The same retry ID again, or an attempt of that request that is active or answered, is recovered before any challenge, quota or spend. Otherwise the bot challenge, the quotas and the spend budget apply as to a question.
+         */
+        post: operations["retryChatOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/internal/chat/grants/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a chat generation grant
+         * @description Internal: the AI service claims an operation's one-use grant before it spends anything, and learns what the generation is bound to.
+         */
+        post: operations["claimChatGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/internal/chat/operations/{operationId}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a chat generation result
+         * @description Internal: the AI service reports the one result of a claimed operation. A result that fails the contract is stored as an internal failure, never as an answer; a repeat changes nothing and answers the stored operation.
+         */
+        post: operations["reportChatResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/internal/chat/operations/{operationId}/compaction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a chat compaction result
+         * @description Internal: the AI service reports the one result of a claimed compaction. A valid summary is installed only at the operation's context revision; a stale, failed or invalid result keeps the working context unchanged. A result that fails the contract is stored as a failure; a repeat changes nothing and answers the stored operation.
+         */
+        post: operations["reportChatCompaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/internal/chat/operations/{operationId}/telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a chat trace before its export
+         * @description Internal: the AI service registers each trace of a claimed operation before it exports it, and exports it only on `allowed`, within 10 minutes of the registration. The API deletes the remote copy at `expiresAt`, 30 days later, or when the conversation is deleted. `refused` means the trace must not be exported, because its conversation or operation is gone or it is already owed a deletion; `expiresAt` is then when its remote copy, should one exist, is deleted. A repeat answers alike.
+         */
+        post: operations["registerChatTelemetry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/openapi.json": {
         parameters: {
             query?: never;
@@ -2364,6 +2608,184 @@ export interface components {
         };
         /** @enum {string} */
         RetrievalContentKind: "profile" | "experience" | "project" | "case_study" | "exploration" | "service" | "education" | "roadmap_area" | "roadmap_module" | "roadmap_resource" | "diary_day" | "book" | "event" | "glossary_term" | "document";
+        ChatConversationClear: {
+            /**
+             * Format: uuid
+             * @description The conversation the visitor confirmed clearing; must be the current one.
+             */
+            conversationId: string;
+        };
+        ChatMessageSubmission: {
+            /**
+             * Format: uuid
+             * @description This question's request, generated by the client; a retry reuses it and recovers it.
+             */
+            requestId: string;
+            question: string;
+            /** @description The bot-challenge token of this submission; redeemed once, never stored. */
+            challengeToken: string;
+        };
+        ChatCompactionSubmission: {
+            /**
+             * Format: uuid
+             * @description This compaction's request, generated by the client; repeating it recovers the compaction.
+             */
+            requestId: string;
+            /** @description The bot-challenge token of this compaction; redeemed once, never stored. */
+            challengeToken: string;
+        };
+        ChatRetrySubmission: {
+            /**
+             * Format: uuid
+             * @description This retry's own idempotency key, generated by the client; repeating it recovers the retry.
+             */
+            retryId: string;
+            /** @description The bot-challenge token of this retry; redeemed once, never stored. */
+            challengeToken: string;
+        };
+        ChatGrantClaim: {
+            /** Format: uuid */
+            operationId: string;
+            grant: string;
+        };
+        ChatGenerationResult: {
+            grant: string;
+            /** @enum {string} */
+            outcome: "answered" | "insufficient_evidence" | "refused" | "unavailable" | "cancelled" | "limit_reached";
+            reason: string | null;
+            /** @enum {string} */
+            language: "en" | "cs";
+            text: string;
+            blocks: components["schemas"]["ChatBlock"][];
+            sources: components["schemas"]["ChatSource"][];
+            related: components["schemas"]["ChatRelatedLink"][];
+            usage: {
+                costUsd: number;
+                costUncertain: boolean;
+                inputTokens: number;
+                outputTokens: number;
+                modelAttempts: number;
+            };
+            versions: {
+                [key: string]: string;
+            };
+            latencyMs: number;
+            context?: {
+                estimatedInputTokens: number;
+                reportedInputTokens: number | null;
+                capTokens: number;
+            } | null;
+        };
+        ChatBlock: {
+            /** @constant */
+            type: "ContactCard";
+            email: string | null;
+            links: components["schemas"]["ChatContactLink"][];
+        } | {
+            /** @constant */
+            type: "ExperienceCard";
+            title: string;
+            organization: string | null;
+            /** Format: date */
+            startedOn: string;
+            endedOn: string | null;
+            summary: string | null;
+            technologies: string[];
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        } | {
+            /** @constant */
+            type: "ServiceCard";
+            title: string;
+            summary: string;
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        } | {
+            /** @constant */
+            type: "ExplorationCard";
+            title: string;
+            summary: string | null;
+            /**
+             * @description The exploration's stored status; never shown stronger than stored.
+             * @enum {string}
+             */
+            status: "built" | "tested" | "designed";
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        } | {
+            /** @constant */
+            type: "RoadmapCard";
+            title: string;
+            summary: string | null;
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        };
+        ChatContactLink: {
+            label: string;
+            /** Format: uri */
+            url: string;
+        };
+        ChatSource: {
+            record: {
+                /** @enum {string} */
+                kind: "person" | "experience" | "project" | "exploration" | "service" | "technology_group" | "roadmap_item";
+                id: string;
+            };
+            title: string;
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        };
+        ChatRelatedLink: {
+            label: string;
+            href: string;
+        };
+        ChatCompactionResult: {
+            grant: string;
+            /** @enum {string} */
+            outcome: "compacted" | "unchanged" | "failed";
+            reason: string | null;
+            summary: components["schemas"]["ChatContextSummary"] | null;
+            kept: number;
+            summaryTokens: number;
+            /** @description The estimate of the working context the next question carries (summary and kept exchanges only); `null` when not measured. */
+            nextInputTokens: number | null;
+            usage: {
+                costUsd: number;
+                costUncertain: boolean;
+                inputTokens: number;
+                outputTokens: number;
+                modelAttempts: number;
+            };
+            versions: {
+                [key: string]: string;
+            };
+            latencyMs: number;
+        };
+        ChatContextSummary: {
+            /** @enum {string} */
+            language: "en" | "cs";
+            /** @default [] */
+            goals?: string[];
+            /** @default [] */
+            openQuestions?: string[];
+            /** @default [] */
+            covered?: string[];
+            /** @default [] */
+            visitorClaims?: string[];
+            /** @default [] */
+            references?: components["schemas"]["ChatSummaryReference"][];
+        };
+        ChatSummaryReference: {
+            /** @enum {string} */
+            kind: "profile" | "contact" | "experience" | "project" | "exploration" | "service" | "education" | "current_focus" | "roadmap" | "roadmap_area" | "roadmap_module" | "diary_day" | "statistics" | "book" | "event";
+            recordId: string;
+            /** @default  */
+            title?: string;
+        };
+        ChatTelemetryRegistration: {
+            grant: string;
+            traceId: string;
+        };
         Health: {
             /** @constant */
             status: "ok";
@@ -2372,7 +2794,7 @@ export interface components {
         ErrorResponse: {
             error: {
                 /** @enum {string} */
-                code: "validation_failed" | "malformed_json" | "credentials_in_url" | "unauthorized" | "not_found" | "conflict" | "payload_too_large" | "unsupported_media_type" | "rate_limited" | "internal_error" | "provider_unavailable" | "budget_exhausted" | "unavailable";
+                code: "validation_failed" | "malformed_json" | "credentials_in_url" | "unauthorized" | "not_found" | "conflict" | "payload_too_large" | "unsupported_media_type" | "rate_limited" | "internal_error" | "provider_unavailable" | "budget_exhausted" | "unavailable" | "forbidden" | "chat_request_conflict" | "chat_busy" | "chat_challenge_failed" | "chat_quota_exceeded" | "chat_budget_exhausted" | "chat_not_retryable";
                 message: string;
                 fields?: components["schemas"]["ErrorField"][];
             };
@@ -3526,6 +3948,270 @@ export interface components {
                 /** Format: date-time */
                 indexedAt: string;
             };
+        };
+        ChatConversation: {
+            /** Format: uuid */
+            conversationId: string;
+            messages: components["schemas"]["ChatMessage"][];
+            /** @description Pass as `before` to read older messages; `null` when there are none. */
+            nextCursor: string | null;
+            activeOperation: components["schemas"]["ChatOperation"] | null;
+            /** @description The conversation is deleted this many days after its last activity. */
+            retentionDays: number;
+        };
+        ChatMessage: components["schemas"]["ChatUserMessage"] | components["schemas"]["ChatAssistantMessage"];
+        ChatUserMessage: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "user";
+            /** Format: uuid */
+            requestId: string;
+            text: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ChatAssistantMessage: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "assistant";
+            /** Format: uuid */
+            requestId: string;
+            /** @enum {string} */
+            status: "pending" | "completed" | "failed" | "interrupted" | "cancelled";
+            outcome: ("answered" | "insufficient_evidence" | "refused" | "unavailable") | null;
+            error: {
+                /** @enum {string} */
+                code: "invalid_request" | "rate_limited" | "unavailable" | "timeout" | "invalid_stream" | "internal" | "cancelled";
+                retryable: boolean;
+            } | null;
+            text: string | null;
+            blocks: components["schemas"]["ChatBlockOutput"][];
+            sources: components["schemas"]["ChatSourceOutput"][];
+            related: components["schemas"]["ChatRelatedLinkOutput"][];
+            /** @description The main model this answer was admitted for; kept after a configuration change. `null` when none was recorded. */
+            model: string | null;
+            /** @description The reasoning effort this answer was admitted for; `null` when none was recorded. */
+            effort: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ChatOperation: {
+            /** Format: uuid */
+            operationId: string;
+            /** Format: uuid */
+            requestId: string;
+            /** @enum {string} */
+            kind: "answer" | "compaction";
+            /** @enum {string} */
+            status: "accepted" | "running" | "completed" | "failed" | "interrupted" | "cancelled";
+            /**
+             * Format: date-time
+             * @description The absolute deadline; it is never extended.
+             */
+            deadlineAt: string;
+            /** @description The answer this operation fills; `null` for a compaction. */
+            assistantMessageId: string | null;
+            /** @description A compaction's reported outcome; `null` for an answer and before a compaction reports. */
+            compaction: components["schemas"]["ChatOperationCompaction"] | null;
+        };
+        ChatOperationCompaction: {
+            /** @enum {string} */
+            outcome: "compacted" | "unchanged" | "failed";
+            reason: string | null;
+        };
+        ChatConversationCleared: {
+            cleared: boolean;
+            conversation: components["schemas"]["ChatConversation"];
+            /** @enum {string} */
+            telemetryDeletion: "none" | "pending";
+        };
+        ChatCompactionResponse: components["schemas"]["ChatCompactionStarted"] | components["schemas"]["ChatCompactionNoop"];
+        ChatCompactionStarted: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "started";
+            operation: components["schemas"]["ChatOperation"];
+        };
+        ChatCompactionNoop: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "noop";
+            /**
+             * @description The working context is already small; nothing was billed or counted.
+             * @constant
+             */
+            reason: "nothing_to_compact";
+        };
+        ChatUsage: {
+            /**
+             * Format: date-time
+             * @description The server's time the snapshot was read at.
+             */
+            serverTime: string;
+            /** @description The server-configured main model and effort; read-only. */
+            model: {
+                name: string;
+                effort: string;
+            };
+            rollingTwoHours: {
+                used: number;
+                limit: number;
+                percent: number;
+                /** @description When the oldest counted operation leaves the rolling window; `null` when none counts. */
+                nextReleaseAt: string | null;
+            };
+            utcDay: {
+                used: number;
+                limit: number;
+                percent: number;
+                /**
+                 * Format: date-time
+                 * @description The next UTC midnight, when the day resets.
+                 */
+                resetsAt: string;
+            };
+            activeOperation: components["schemas"]["ChatOperation"] | null;
+            /** @description Why a new question would be refused now and when it may pass again; `null` when it would pass these limits. */
+            restriction: {
+                /** @enum {string} */
+                reason: "minute" | "two_hours" | "day" | "shared_network" | "service_budget";
+                /** Format: date-time */
+                retryAt: string;
+            } | null;
+            /** @description The conversation's last main model call: its serialized input against the effective cap. */
+            context: {
+                /** @constant */
+                status: "measured";
+                /** Format: uuid */
+                operationId: string;
+                /** Format: date-time */
+                measuredAt: string;
+                /** @description The tokenizer estimate of the last main call's serialized input. */
+                estimatedInputTokens: number;
+                /** @description The input tokens the provider reported for that call; `null` if none. */
+                reportedInputTokens: number | null;
+                /** @description The input-token cap that call was sent under. */
+                capTokens: number;
+            } | {
+                /** @constant */
+                status: "unavailable";
+            };
+            /** @description A post-compaction estimate of the history the next request carries; future tool tokens are unknown and never claimed. `unavailable` unless the latest measured operation was a compaction. */
+            nextRequest: {
+                /** @constant */
+                status: "estimated";
+                /** @description The estimated tokens of the working context after the compaction: the summary and the kept exchanges, never the question, the instructions or tool results. */
+                historyTokens: number;
+                /**
+                 * Format: uuid
+                 * @description The compaction that measured it.
+                 */
+                operationId: string;
+                /** Format: date-time */
+                measuredAt: string;
+            } | {
+                /** @constant */
+                status: "unavailable";
+            };
+        };
+        ChatGrantClaimed: {
+            /** @constant */
+            claimed: true;
+            /**
+             * @description Whether the grant is for an answer or a compaction; the other is refused.
+             * @enum {string}
+             */
+            kind: "answer" | "compaction";
+            /** Format: date-time */
+            deadlineAt: string;
+            allowanceUsd: number;
+            model: string;
+            /** @description The reasoning effort bound at admission; `null` for an operation admitted without one. */
+            effort: string | null;
+            pricingVersion: string;
+            contextRevision: number;
+        };
+        ChatTelemetryRegistered: {
+            traceId: string;
+            /** @enum {string} */
+            export: "allowed" | "refused";
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        ChatBlockOutput: {
+            /** @constant */
+            type: "ContactCard";
+            email: string | null;
+            links: components["schemas"]["ChatContactLinkOutput"][];
+        } | {
+            /** @constant */
+            type: "ExperienceCard";
+            title: string;
+            organization: string | null;
+            /** Format: date */
+            startedOn: string;
+            endedOn: string | null;
+            summary: string | null;
+            technologies: string[];
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        } | {
+            /** @constant */
+            type: "ServiceCard";
+            title: string;
+            summary: string;
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        } | {
+            /** @constant */
+            type: "ExplorationCard";
+            title: string;
+            summary: string | null;
+            /**
+             * @description The exploration's stored status; never shown stronger than stored.
+             * @enum {string}
+             */
+            status: "built" | "tested" | "designed";
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        } | {
+            /** @constant */
+            type: "RoadmapCard";
+            title: string;
+            summary: string | null;
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        };
+        ChatContactLinkOutput: {
+            label: string;
+            /** Format: uri */
+            url: string;
+        };
+        ChatSourceOutput: {
+            record: {
+                /** @enum {string} */
+                kind: "person" | "experience" | "project" | "exploration" | "service" | "technology_group" | "roadmap_item";
+                id: string;
+            };
+            title: string;
+            /** @description A path on this site with an optional anchor, such as `/experience#…`. */
+            href: string;
+        };
+        ChatRelatedLinkOutput: {
+            label: string;
+            href: string;
         };
     };
     responses: never;
@@ -12636,6 +13322,1223 @@ export interface operations {
             };
             /** @description `provider_unavailable`: an outside provider the route needs is not configured, failed or did not answer in time; `budget_exhausted`: the month's spend on it reached its ceiling. Never reported as an empty result. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getChatConversation: {
+        parameters: {
+            query?: {
+                /** @description Read the messages before this message of the caller's conversation. */
+                before?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The conversation. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatConversation"];
+                };
+            };
+            /** @description `validation_failed` (an unknown or invalid query parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    clearChatConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatConversationClear"];
+            };
+        };
+        responses: {
+            /** @description Whether the conversation was cleared, and the caller's conversation now. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatConversationCleared"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    askChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatMessageSubmission"];
+            };
+        };
+        responses: {
+            /** @description The same request again: its existing operation. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description The question is admitted. */
+            202: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `chat_request_conflict`: the request ID was used for another question; `chat_busy`: the conversation already has a question in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted; `chat_quota_exceeded`: the visitor's question quota is spent. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `chat_budget_exhausted`: the chat's spend budget is spent; `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    compactChatConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatCompactionSubmission"];
+            };
+        };
+        responses: {
+            /** @description The same request again (its operation), or a local no-op. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatCompactionResponse"];
+                };
+            };
+            /** @description The compaction is admitted: its operation. */
+            202: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatCompactionResponse"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `chat_request_conflict`: the request ID was used for a question; `chat_busy`: the conversation already has a question or compaction in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted; `chat_quota_exceeded`: the visitor's question quota is spent. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `chat_budget_exhausted`: the chat's spend budget is spent; `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getChatOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The operation. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    streamChatOperation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The last chat event ID the client received; later events follow. */
+                "last-event-id"?: string;
+            };
+            path: {
+                operationId: string;
+            };
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event stream. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getChatUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The usage snapshot. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatUsage"];
+                };
+            };
+            /** @description `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    stopChatOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The operation, cancelled or as it ended. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description `validation_failed` (a malformed path parameter, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay or has no allowed origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retryChatOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: {
+                /** @description The visitor's opaque chat identity. A missing, unknown or forged value gets a fresh identity. */
+                sebela_chat?: string;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRetrySubmission"];
+            };
+        };
+        responses: {
+            /** @description The retry or the attempt recovered: its operation. */
+            200: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description The retry is admitted. */
+            202: {
+                headers: {
+                    /** @description `sebela_chat`, only when a new identity was issued: HttpOnly, SameSite=Lax, Path=/, Secure in production, for the retention period. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the request does not come through the website's chat relay, has no allowed origin or is not JSON; `chat_challenge_failed`: the bot challenge failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_found`: the record does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `chat_request_conflict`: the retry ID was used for another attempt; `chat_busy`: the conversation already has a question in progress; `chat_not_retryable`: the attempt did not end with a retryable failure of the latest question. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted; `chat_quota_exceeded`: the visitor's question quota is spent. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `chat_budget_exhausted`: the chat's spend budget is spent; `unavailable`: the chat is off or its database cannot be reached. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    claimChatGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatGrantClaim"];
+            };
+        };
+        responses: {
+            /** @description The grant is claimed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatGrantClaimed"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the control token is missing or wrong; no API key is accepted. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the grant is not the operation's. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the grant was claimed already, or the operation is over. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reportChatResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatGenerationResult"];
+            };
+        };
+        responses: {
+            /** @description The operation as reconciled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the control token is missing or wrong; no API key is accepted. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the grant is not the operation's, or the operation is a compaction. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the operation's grant has not been claimed, or its conversation was cleared. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reportChatCompaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatCompactionResult"];
+            };
+        };
+        responses: {
+            /** @description The operation as reconciled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOperation"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the control token is missing or wrong; no API key is accepted. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the grant is not the operation's, or the operation is an answer. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the operation's grant has not been claimed, or its conversation was cleared. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    registerChatTelemetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatTelemetryRegistration"];
+            };
+        };
+        responses: {
+            /** @description Whether the trace may be exported, and when its remote copy is deleted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatTelemetryRegistered"];
+                };
+            };
+            /** @description `malformed_json`, `validation_failed` (a malformed path parameter or an invalid body or a broken domain rule, with `fields`), `credentials_in_url` (a credential was sent in the query string) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unauthorized`: the control token is missing or wrong; no API key is accepted. */
+            401: {
+                headers: {
+                    /** @description `Bearer`. */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `forbidden`: the grant is not the operation's. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `conflict`: the operation's grant has not been claimed, or the trace is another operation's. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `payload_too_large`: the body exceeds the configured limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `unsupported_media_type`: the body is not `application/json`. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `rate_limited`: a rate-limit budget is exhausted. */
+            429: {
+                headers: {
+                    /** @description Seconds until the budget is renewed. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `internal_error`: an unexpected failure, without details. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

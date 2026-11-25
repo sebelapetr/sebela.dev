@@ -10,6 +10,7 @@ import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { serveChatStack } from "./chat-stack";
 import { startProxy, type Proxy } from "./proxy";
 import {
   fixtureFolder,
@@ -262,25 +263,25 @@ test.describe("a profile without any optional content", () => {
     expect(download.headers()["location"]).toBe("/cv");
   });
 
-  test("the Ask page offers its suggestions with the name", async ({ page }) => {
+  test("the Ask page names the person and says that this website has no chat", async ({ page }) => {
     const response = await page.goto(`${website.url}/ask`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(sparse.name);
+    await expect(page.getByText("The chat is not available right now.")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Suggested questions" })).toHaveCount(0);
+  });
+});
+
+test.describe("a profile without any optional content, with the chat", () => {
+  const stack = serveChatStack({ fixture: "with-sparse-content" });
+
+  test("the Ask page offers its suggestions with the name", async ({ page }) => {
+    const response = await page.goto(`${stack().url}/ask`);
     expect(response?.status()).toBe(200);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(sparse.name);
     await expect(
       page.getByRole("button", { name: `What is ${sparse.name} working on now?` }),
     ).toBeVisible();
-
-    // Too little evidence and nothing to contact: the answer says so without an empty contact card.
-    await hydrated(page);
-    await page
-      .getByRole("button", { name: `What are ${sparse.name}'s strongest engineering skills?` })
-      .click();
-    const answer = page.getByRole("list", { name: "Conversation" }).locator(":scope > li").last();
-    await expect(answer.locator("[aria-busy='false']")).toHaveCount(1);
-    await expect(answer).toContainText("I don't have enough evidence");
-    await expect(answer.getByRole("list", { name: "Cards" })).toHaveCount(0);
-    await expect(answer.getByRole("list", { name: "Sources", exact: true })).toHaveCount(0);
-    await expect(answer).not.toContainText("Contact");
   });
 });
 

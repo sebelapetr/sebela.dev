@@ -57,3 +57,13 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  # Behind its profile, like the production composition's: it runs when the environment file
+  # activates it, and then the deployment waits for its health too.
+  ai-service:
+    <<: *release
+    profiles: [ai-service]
+    image: ${DEPLOY_REGISTRY:?set DEPLOY_REGISTRY}/sebela-ai-service:${AI_SERVICE_IMAGE_TAG:-}
+    depends_on:
+      api:
+        condition: service_healthy

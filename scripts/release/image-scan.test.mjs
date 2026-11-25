@@ -454,9 +454,14 @@ describe("report command", () => {
       box,
     );
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(fs.readdirSync(out).sort(), ["api.sarif", "mcp-admin.sarif", "web.sarif"]);
+    assert.deepEqual(fs.readdirSync(out).sort(), [
+      "ai-service.sarif",
+      "api.sarif",
+      "mcp-admin.sarif",
+      "web.sarif",
+    ]);
     const calls = fs.readFileSync(box.args, "utf8").trim().split("\n");
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
     assert.match(calls[0], /ghcr.io\/sebelapetr\/sebela-api:current$/);
     for (const call of calls) {
       assert.match(call, /--image-src remote/);
@@ -481,7 +486,7 @@ describe("report command", () => {
       const { result, calls } = reportCalls(env);
       assert.equal(result.status, 0, result.stderr);
       const lines = calls.trim().split("\n");
-      assert.equal(lines.length, 3);
+      assert.equal(lines.length, 4);
       for (const line of lines) assert.match(line, / --ignore-unfixed /);
     }
   });
@@ -489,7 +494,7 @@ describe("report command", () => {
   it("reports the findings without a fix too when INCLUDE_UNFIXED is true", () => {
     const { result, calls } = reportCalls({ INCLUDE_UNFIXED: "true" });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(calls.trim().split("\n").length, 3);
+    assert.equal(calls.trim().split("\n").length, 4);
     assert.doesNotMatch(calls, /--ignore-unfixed/);
   });
 

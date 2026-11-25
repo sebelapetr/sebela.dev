@@ -1,0 +1,11 @@
+{
+  "name": "@sebela/api-client-python",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Python client of the content API, generated from its OpenAPI document: pnpm and Turborepo task wrappers; Python metadata lives in pyproject.toml.",
+  "license": "MIT",
+  "scripts": {
+    "build": "uv build --quiet --out-dir dist",
+    "generate": "uv run --locked openapi-python-client generate --path ../api-client/src/generated/openapi.json --meta none --config content-api-client.yaml --output-path src/sebela_api_client --overwrite && printf '# Marker file for PEP 561\\n' > src/sebela_api_client/py.typed"
+  }
+}

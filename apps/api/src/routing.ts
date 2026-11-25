@@ -19,6 +19,11 @@ export interface RouteDocumentation {
   /** Hono syntax, `:name` for a parameter. */
   readonly path: string;
   readonly access: "public" | "private";
+  /**
+   * Who a private route authorises, when it is not an API key: `control` is the AI service's own
+   * control token, accepted on the control routes and nowhere else.
+   */
+  readonly authorization?: "control";
   readonly summary: string;
   readonly description?: string;
   /** The per-client budget, when it is not the one of its access, for example `upload`. */
@@ -36,6 +41,21 @@ export interface RouteDocumentation {
   readonly content?: ContentDomain;
   /** The path parameters, `:name` in `path`; validated before the body. */
   readonly params?: z.ZodObject;
+  /** The query parameters; validated before the handler runs. */
+  readonly query?: z.ZodObject;
+  /** The request headers the route reads, such as `Last-Event-ID`. */
+  readonly headers?: z.ZodObject;
+  /**
+   * The visitor chat cookie: read as the caller's identity, and set on the success when a new
+   * identity was issued.
+   */
+  readonly cookie?: { readonly name: string; readonly description: string };
+  /**
+   * A visitor write a browser sends: it must come from an allowed origin, with a JSON content type
+   * when it has a body, else it is a 403 `forbidden` before the body is read, so it never answers
+   * 415.
+   */
+  readonly sameOrigin?: true;
   /** The JSON request body; validated before the handler runs. */
   readonly body?: z.ZodType;
   /**
@@ -44,8 +64,10 @@ export interface RouteDocumentation {
    */
   readonly upload?: { readonly schema: z.ZodObject; readonly fileField: string };
   readonly response: {
-    readonly status: 200 | 201 | 204;
+    readonly status: 200 | 201 | 202 | 204;
     readonly description: string;
+    /** A second success with the same body, such as the `200` of a repeated chat request. */
+    readonly also?: { readonly status: 200; readonly description: string };
     readonly schema?: z.ZodType;
     /** Media type of a non-JSON success, for example the HTML reference. */
     readonly mediaType?: string;
@@ -61,6 +83,11 @@ export interface RouteDocumentation {
     readonly file?: readonly string[];
   };
   readonly errors: readonly RouteError[];
+  /**
+   * Further documented refusals by status, beyond `errors`, each with its codes, for example the
+   * visitor chat's `chat_busy`.
+   */
+  readonly refusals?: Partial<Record<403 | 404 | 409 | 429 | 503, string>>;
 }
 
 /** The file part of a multipart body, as the handler receives it. */

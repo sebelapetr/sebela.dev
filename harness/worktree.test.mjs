@@ -697,6 +697,91 @@ test("a generated environment file signs the API's invalidations for the worktre
   assert.notEqual(otherSettings.API_WEB_INVALIDATION_URL, settings.API_WEB_INVALIDATION_URL);
 });
 
+test("a generated environment file pairs the API with its worktree's own AI service", (t) => {
+  const { create, envPath } = fixture(t);
+  const other = create("feat/other");
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const otherSettings = parseEnv(fs.readFileSync(path.join(other.path, ".env.local"), "utf8"));
+
+  // The API's sender and the AI service's receiver share one token, the reverse direction another.
+  assert.ok(
+    settings.AI_SERVICE_TOKEN.length >= 32,
+    "an AI service token of at least 32 characters",
+  );
+  assert.equal(settings.API_AI_SERVICE_TOKEN, settings.AI_SERVICE_TOKEN);
+  assert.ok(settings.AI_SERVICE_CONTROL_TOKEN.length >= 32, "a control token of 32 characters");
+  assert.equal(settings.API_AI_CONTROL_TOKEN, settings.AI_SERVICE_CONTROL_TOKEN);
+  assert.ok(settings.API_CHAT_FINGERPRINT_KEY.length >= 32, "a fingerprint key of 32 characters");
+  // The website's chat relay and the API share a third token.
+  assert.ok(settings.WEB_CHAT_RELAY_TOKEN.length >= 32, "a relay token of at least 32 characters");
+  assert.equal(settings.API_CHAT_RELAY_TOKEN, settings.WEB_CHAT_RELAY_TOKEN);
+  const secrets = [
+    settings.AI_SERVICE_TOKEN,
+    settings.AI_SERVICE_CONTROL_TOKEN,
+    settings.API_CHAT_FINGERPRINT_KEY,
+    settings.WEB_CHAT_RELAY_TOKEN,
+    settings.WEB_INVALIDATION_SECRET,
+  ];
+  assert.equal(new Set(secrets).size, secrets.length, "every secret is a value of its own");
+  for (const name of [
+    "AI_SERVICE_TOKEN",
+    "AI_SERVICE_CONTROL_TOKEN",
+    "API_CHAT_FINGERPRINT_KEY",
+    "WEB_CHAT_RELAY_TOKEN",
+  ]) {
+    assert.notEqual(otherSettings[name], settings[name], `${name} differs between worktrees`);
+  }
+
+  // Each side reaches the other on the worktree's own ports.
+  assert.equal(settings.AI_SERVICE_HOST, example.AI_SERVICE_HOST);
+  assert.equal(
+    settings.API_AI_SERVICE_URL,
+    `http://${example.AI_SERVICE_HOST}:${settings.LLM_AGENT_PORT}`,
+  );
+  assert.equal(settings.AI_SERVICE_API_URL, `http://${example.API_HOST}:${settings.API_PORT}`);
+  assert.notEqual(otherSettings.API_AI_SERVICE_URL, settings.API_AI_SERVICE_URL);
+  assert.notEqual(otherSettings.AI_SERVICE_API_URL, settings.AI_SERVICE_API_URL);
+});
+
+test("a generated environment file turns the chat on with test keys and the agent's versions", (t) => {
+  const { envPath } = fixture(t);
+  const settings = parseEnv(fs.readFileSync(envPath, "utf8"));
+  const agentConfig = fs.readFileSync(
+    path.join(import.meta.dirname, "..", "packages/llm-agent/src/llm_agent/models/config.py"),
+    "utf8",
+  );
+  const constant = (name) => new RegExp(`^${name}: Final = "([^"]+)"$`, "m").exec(agentConfig)[1];
+
+  assert.equal(settings.API_CHAT_ALLOWED_ORIGINS, settings.WEB_SITE_ORIGIN);
+  assert.equal(settings.API_CHAT_COOKIE_SECURE, "false");
+  // The versions the AI service accepts, from the same revision as the harness.
+  assert.equal(settings.API_CHAT_MODEL, constant("HAIKU"));
+  assert.equal(settings.API_CHAT_EFFORT, constant("MAIN_EFFORT"));
+  assert.equal(settings.API_CHAT_PRICING_VERSION, constant("PRICING_VERSION"));
+  // Cloudflare's published always-pass test keys, issued for the worktree's website host.
+  assert.equal(settings.API_TURNSTILE_SECRET_KEY, "1x0000000000000000000000000000000AA");
+  assert.equal(settings.WEB_TURNSTILE_SITE_KEY, "1x00000000000000000000AA");
+  assert.equal(settings.API_TURNSTILE_EXPECTED_HOSTNAME, example.WEB_HOST);
+  assert.equal(settings.AI_SERVICE_MODEL, "fake");
+});
+
+test("a worktree is not created without the AI service's host", (t) => {
+  const mainRoot = mainCheckout(t);
+
+  assert.throws(
+    () =>
+      createWorktree({
+        mainRoot,
+        branch: "fix/no-ai-host",
+        env: { AI_SERVICE_HOST: "" },
+        databases: fakeDatabases(),
+        backend: fakeBackend(fakeDatabases()),
+      }),
+    /AI_SERVICE_HOST is not set/,
+  );
+  assert.equal(branchExists(mainRoot, "fix/no-ai-host"), false);
+});
+
 test("a generated environment file lets the website optimise only its worktree's media", (t) => {
   const { create, envPath } = fixture(t);
   const other = create("feat/other");

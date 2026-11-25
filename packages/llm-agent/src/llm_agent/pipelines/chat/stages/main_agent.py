@@ -8,10 +8,11 @@ cap as `tool_calls`.
 A provider refusal or a `refused` draft declines the request; anything that is not a valid draft
 stops as `invalid_output`.
 
-The newest earlier exchanges (within the history caps, halved after `UNCERTAIN`) precede the
-question as untrusted context. Before every decision the oldest exchanges are dropped until the
-input fits the Main input cap; the instructions, the question and every tool call with its result
-are never dropped, so an input that still does not fit stops as `context_too_large`.
+The newest earlier exchanges (within the history caps, halved after `UNCERTAIN`), after the
+caller's installed summary when it fits too, precede the question as untrusted context. Before
+every decision the summary and then the oldest exchanges are dropped until the input fits the Main
+input cap; the instructions, the question and every tool call with its result are never dropped,
+so an input that still does not fit stops as `context_too_large`.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from typing import Any, Final
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from pydantic import ValidationError
 
-from llm_agent.context.history import history_block, select_history
+from llm_agent.context.history import history_block, select_context
 from llm_agent.context.tokens import request_tokens
 from llm_agent.guardrails.input import visitor_block
 from llm_agent.guardrails.output import Draft
@@ -60,22 +61,17 @@ async def answer(execution: Execution, *, uncertain: bool) -> Draft | None:
     try:
         result = await _loop(execution, context, uncertain=uncertain)
     except ModelUnavailable as error:
-        tracer.finish(
-            "stage.main", "error", started, uncertain=uncertain, history_exchanges=context.shown
-        )
+        tracer.finish("stage.main", "error", started, **context.labels(uncertain))
         raise Unavailable("model_unavailable") from error
     except ExecutionStopped as stop:
-        tracer.finish(
-            "stage.main", stop.reason, started, uncertain=uncertain, history_exchanges=context.shown
-        )
+        tracer.finish("stage.main", stop.reason, started, **context.labels(uncertain))
         raise
     tracer.finish(
         "stage.main",
         "ok",
         started,
-        uncertain=uncertain,
         declined=result is None,
-        history_exchanges=context.shown,
+        **context.labels(uncertain),
     )
     return result
 
@@ -86,8 +82,9 @@ class _Context:
     def __init__(self, execution: Execution, *, uncertain: bool) -> None:
         limits = execution.limits
         request = execution.request
-        self._history = select_history(
+        self._summary, self._history = select_context(
             request.history,
+            request.summary,
             max_exchanges=limits.history_exchanges,
             max_tokens=limits.uncertain_history_tokens if uncertain else limits.history_tokens,
         )
@@ -97,19 +94,30 @@ class _Context:
         self._question = visitor_block(request.question)
         self._cap = limits.main_input_tokens
 
-    @property
-    def shown(self) -> int:
-        return len(self._history)
+    def labels(self, uncertain: bool) -> dict[str, bool | int]:
+        """The stage span's attributes: what of the working context the model was shown."""
+        return {
+            "uncertain": uncertain,
+            "history_exchanges": len(self._history),
+            "history_summary": self._summary is not None,
+        }
 
     def opening(self) -> HumanMessage:
-        history = history_block(self._history)
+        history = history_block(self._history, summary=self._summary)
         return HumanMessage(self._head + (f"{history}\n" if history else "") + self._question)
 
     def fit(self, messages: list[BaseMessage]) -> None:
-        """Drops the oldest exchanges from `messages[1]` until the request fits the input cap."""
-        while self._history and request_tokens(messages, TOOL_SPECS, DRAFT_SCHEMA) > self._cap:
-            self._history = self._history[1:]
+        """Drops the summary, then the oldest exchanges, from `messages[1]` until the request fits
+        the input cap."""
+        while (self._summary or self._history) and self._over(messages):
+            if self._summary is not None:
+                self._summary = None
+            else:
+                self._history = self._history[1:]
             messages[1] = self.opening()
+
+    def _over(self, messages: list[BaseMessage]) -> bool:
+        return request_tokens(messages, TOOL_SPECS, DRAFT_SCHEMA) > self._cap
 
 
 async def _loop(execution: Execution, context: _Context, *, uncertain: bool) -> Draft | None:

@@ -4,8 +4,10 @@ import {
   canRetryChatTurn,
   endChatStream,
   receiveChatEvent,
+  rejectChatTurn,
   restartChatTurn,
   startChatTurn,
+  stopChatTurn,
   timeOutChatTurn,
   type ChatTurn,
 } from "./conversation";
@@ -33,6 +35,7 @@ describe("startChatTurn", () => {
       related: [],
       outcome: null,
       error: null,
+      model: null,
     });
   });
 });
@@ -160,6 +163,91 @@ describe("receiveChatEvent", () => {
 
     expect(receiveChatEvent(complete, event(2, { type: "text_delta", text: "Late" }))).toBe(
       complete,
+    );
+  });
+});
+
+describe("receiveChatEvent with progress", () => {
+  const progress = (fields: Record<string, unknown> = {}) => ({
+    type: "progress",
+    requestId: REQUEST,
+    stage: "answering",
+    elapsedMs: 4000,
+    ...fields,
+  });
+
+  it("accepts a sign of life of the same request without changing the turn", () => {
+    const started = receiveChatEvent(startChatTurn(REQUEST, "Q?"), event(0, { type: "start" }));
+
+    expect(receiveChatEvent(started, progress())).toBe(started);
+  });
+
+  it("accepts it before the answer starts, keeping the turn pending", () => {
+    const pending = startChatTurn(REQUEST, "Q?");
+
+    expect(receiveChatEvent(pending, progress({ stage: "queued", elapsedMs: 0 }))).toBe(pending);
+  });
+
+  it("still takes the next answer event after it", () => {
+    const turn = receiveAll(startChatTurn(REQUEST, "Q?"), [
+      event(0, { type: "start" }),
+      progress(),
+      event(1, { type: "text_delta", text: "After progress" }),
+    ]);
+
+    expect(turn).toMatchObject({ status: "streaming", text: "After progress" });
+  });
+
+  it("fails a progress frame carrying text as an invalid stream", () => {
+    const started = receiveChatEvent(startChatTurn(REQUEST, "Q?"), event(0, { type: "start" }));
+
+    expect(receiveChatEvent(started, progress({ text: "draft" }))).toMatchObject({
+      status: "failed",
+      error: { code: "invalid_stream" },
+    });
+  });
+});
+
+describe("rejectChatTurn", () => {
+  it.each([
+    ["challenge_failed", true],
+    ["busy", true],
+    ["quota_exceeded", true],
+    ["rate_limited", true],
+    ["unavailable", true],
+    ["budget_exhausted", false],
+    ["conflict", false],
+    ["invalid_request", false],
+    ["not_retryable", false],
+  ] as const)("fails an open turn not admitted for %s (retryable: %s)", (code, retryable) => {
+    expect(rejectChatTurn(startChatTurn(REQUEST, "Q?"), code)).toMatchObject({
+      status: "failed",
+      question: "Q?",
+      text: "",
+      error: { code, retryable },
+    });
+  });
+
+  it("keeps when the API said to try again", () => {
+    expect(rejectChatTurn(startChatTurn(REQUEST, "Q?"), "quota_exceeded", 120).error).toEqual({
+      code: "quota_exceeded",
+      retryable: true,
+      retryAfterSeconds: 120,
+    });
+  });
+
+  it("leaves an ended turn as it is", () => {
+    const interrupted = endChatStream(startChatTurn(REQUEST, "Q?"));
+
+    expect(rejectChatTurn(interrupted, "busy")).toBe(interrupted);
+  });
+
+  it("can be retried where the reason allows it", () => {
+    expect(canRetryChatTurn(rejectChatTurn(startChatTurn(REQUEST, "Q?"), "challenge_failed"))).toBe(
+      true,
+    );
+    expect(canRetryChatTurn(rejectChatTurn(startChatTurn(REQUEST, "Q?"), "budget_exhausted"))).toBe(
+      false,
     );
   });
 });
@@ -421,5 +509,24 @@ describe("receiveChatEvent with a stream delivered twice", () => {
     ]);
 
     expect(turn).toMatchObject({ status: "failed", text: "", error: { code: "invalid_stream" } });
+  });
+});
+
+describe("stopChatTurn", () => {
+  it("fails an open turn as stopped, keeping its partial answer, and lets it be asked again", () => {
+    const stopped = stopChatTurn({ ...startChatTurn(REQUEST, "Q?"), text: "Part" });
+
+    expect(stopped).toMatchObject({
+      status: "failed",
+      text: "Part",
+      error: { code: "cancelled", retryable: true },
+    });
+    expect(canRetryChatTurn(stopped)).toBe(true);
+  });
+
+  it("leaves an ended turn as it is", () => {
+    const interrupted = endChatStream(startChatTurn(REQUEST, "Q?"));
+
+    expect(stopChatTurn(interrupted)).toBe(interrupted);
   });
 });
